@@ -1,0 +1,55 @@
+# =============================================================================
+#  Deep Learning with PyTorch: From Foundations to Frontier
+#  Conda environment -- CPU-only variant (Windows, Linux, macOS incl. Apple Silicon)
+# =============================================================================
+#
+#      conda env create -f environment-cpu.yml
+#      conda activate dl-course-cpu
+#      python -m ipykernel install --user --name dl-course-cpu --display-name "Python (dl-course, CPU)"
+#      jupyter lab
+#
+#  Every notebook has a FAST_RUN switch that shrinks the training budgets so that the whole
+#  notebook runs in a few minutes on a CPU. Use environment.yml instead if you have an NVIDIA GPU.
+#  On Apple Silicon the CPU wheels also enable the "mps" backend; the notebooks pick it up
+#  automatically where it is used, otherwise they run on the CPU.
+#
+name: dl-course-cpu
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - pip>=24
+  - numpy>=2.0
+  - scipy
+  - pandas
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  - pillow
+  - pyyaml
+  - requests
+  - tqdm
+  - jupyterlab>=4
+  - ipykernel
+  - ipywidgets
+  - nbformat
+  - nbconvert
+  - tensorboard
+  - pip:
+      # The CPU wheel index serves "+cpu" builds on Windows/Linux and the plain builds on macOS.
+      - --extra-index-url https://download.pytorch.org/whl/cpu
+      - torch==2.14.0
+      - torchvision==0.29.0
+      - torchinfo
+      - safetensors
+      - transformers>=4.50
+      - datasets>=3.0
+      - tokenizers
+      - accelerate
+      - peft
+      - gymnasium>=1.0
+      - onnx
+      - onnxscript
+      - onnxruntime
+      - optuna

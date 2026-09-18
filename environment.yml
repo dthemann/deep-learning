@@ -1,0 +1,75 @@
+# =============================================================================
+#  Deep Learning with PyTorch: From Foundations to Frontier
+#  Conda environment (NVIDIA GPU / CUDA build) -- also works on a machine without a GPU
+# =============================================================================
+#
+#  Create and activate:
+#      conda env create -f environment.yml
+#      conda activate dl-course
+#      python -m ipykernel install --user --name dl-course --display-name "Python (dl-course)"
+#      jupyter lab
+#
+#  Verify the GPU is visible:
+#      python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+#
+#  Notes
+#  -----
+#  * PyTorch is installed with pip from the official PyTorch wheel index. The PyTorch team stopped
+#    publishing conda packages after version 2.5, so pip wheels are the supported route even inside
+#    a conda environment.
+#  * "cu126" wheels bundle the CUDA 12.6 runtime; you only need an NVIDIA driver that supports
+#    CUDA 12 (driver >= 528 on Windows, >= 525 on Linux). No separate CUDA toolkit install is needed.
+#    For a newer toolkit build replace "cu126" with "cu130" or "cu132" in the two lines below.
+#  * If no NVIDIA GPU is present the same environment simply runs on the CPU.
+#    A smaller CPU-only variant is provided in environment-cpu.yml (also the one to use on macOS).
+#  * Updating: "conda env update -f environment.yml --prune".
+#
+name: dl-course
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - pip>=24
+
+  # --- scientific Python stack -------------------------------------------------
+  - numpy>=2.0
+  - scipy
+  - pandas
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  - pillow
+  - pyyaml
+  - requests
+  - tqdm
+
+  # --- notebooks and experiment tracking ---------------------------------------
+  - jupyterlab>=4
+  - ipykernel
+  - ipywidgets
+  - nbformat
+  - nbconvert
+  - tensorboard
+
+  # --- PyTorch and the deep learning ecosystem (pip) ---------------------------
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu126
+      - torch==2.14.0+cu126
+      - torchvision==0.29.0+cu126
+      - torchinfo                       # model summaries (Notebook 05)
+      - safetensors
+      # Hugging Face stack (Notebook 10, parts of 17)
+      - transformers>=4.50
+      - datasets>=3.0
+      - tokenizers
+      - accelerate
+      - peft
+      # Reinforcement learning (Notebook 13)
+      - gymnasium>=1.0
+      # Export and deployment (Notebook 15)
+      - onnx
+      - onnxscript
+      - onnxruntime
+      # Hyperparameter optimisation (Notebook 14)
+      - optuna
