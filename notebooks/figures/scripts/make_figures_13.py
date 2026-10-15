@@ -497,8 +497,10 @@ def policy_grad_episode(theta, S, A, w):
 
 
 def reinforce3(variant, n_ep=300, lr=0.1, gamma=0.9, seed=0, T=20):
+    """Tabular REINFORCE on the three-state MDP. The baseline variant subtracts the running mean of all
+    reward-to-go values seen so far (a constant baseline, as in the notebook's variance measurement)."""
     r = np.random.default_rng(seed)
-    theta, base, cnt = np.zeros((3, 2)), np.zeros(3), np.zeros(3)
+    theta, base, cnt = np.zeros((3, 2)), 0.0, 0
     out = np.zeros(n_ep)
     for ep in range(n_ep):
         S, A, Rw = episode3(theta, r, T)
@@ -508,9 +510,8 @@ def reinforce3(variant, n_ep=300, lr=0.1, gamma=0.9, seed=0, T=20):
         elif variant == "reward-to-go":
             w = G
         else:
-            w = G - base[S]
-            for s, g in zip(S, G):
-                cnt[s] += 1; base[s] += (g - base[s]) / cnt[s]
+            w = G - base
+            cnt += T; base += (G.sum() - T * base) / cnt
         theta += lr * policy_grad_episode(theta, S, A, w) / T
         out[ep] = Rw.sum()
     return out, theta
@@ -519,7 +520,7 @@ def reinforce3(variant, n_ep=300, lr=0.1, gamma=0.9, seed=0, T=20):
 def fig_reinforce_estimators():
     banner("Figure reinforce_estimators: three REINFORCE estimators on the three-state MDP")
     gamma, T = 0.9, 20
-    variants = ["full return", "reward-to-go", "reward-to-go + baseline"]
+    variants = ["full return", "reward-to-go", "reward-to-go + baseline"]   # baseline = constant mean reward-to-go
     # exact values of the stationary reward rate for the two reference policies
     for name, pi in [("always move", np.array([[0.0, 1.0]] * 3)), ("coin flip", np.array([[0.5, 0.5]] * 3))]:
         P_pi = np.einsum("sa,ask->sk", pi, P3)
@@ -533,25 +534,26 @@ def fig_reinforce_estimators():
     for i, variant in enumerate(variants):
         curves = np.array([reinforce3(variant, seed=sd)[0] for sd in range(20)])
         m = moving_average(curves.mean(0), 10)
-        ax.plot(np.arange(len(m)), m, color=SERIES[i], label=variant)
+        ax.plot(np.arange(len(m)), m, color=SERIES[i], label=variant + (" (running mean of G)" if "baseline" in variant else ""))
         print(f"{variant}: mean reward per episode (20 seeds), episodes 1-20: {curves[:, :20].mean():.2f}, "
               f"141-160: {curves[:, 140:160].mean():.2f}, 281-300: {curves[:, -20:].mean():.2f}")
     ax.set_xlabel("training episode"); ax.set_ylabel("reward collected per 20-step episode (mean of 20 seeds, MA 10)")
     ax.set_title("REINFORCE learning curves (tabular softmax policy)"); ax.legend(loc="lower right")
 
-    # gradient variance at a fixed, half-trained policy; baseline = exact V^pi(s)
+    # gradient variance at a fixed, half-trained policy; constant baseline = mean reward-to-go on calibration episodes
     theta = np.array([[0.0, 0.5], [0.0, 0.5], [0.0, 0.5]])
     pi = softmax_rows(theta)
-    P_pi = np.einsum("sa,ask->sk", pi, P3); r_pi = np.einsum("sa,as->s", pi, R3)
-    V_pi = np.linalg.solve(np.eye(3) - gamma * P_pi, r_pi)
-    print(f"\nfixed probe policy pi(move | s) = {pi[0, 1]:.3f} in every state; exact V^pi = {V_pi}")
     r = np.random.default_rng(123)
+    calib = np.concatenate([discounted_returns(episode3(theta, r, T)[2], gamma) for _ in range(200)])
+    b_const = float(calib.mean())
+    print(f"\nfixed probe policy pi(move | s) = {pi[0, 1]:.3f} in every state; constant baseline = mean reward-to-go "
+          f"over 200 calibration episodes = {b_const:.4f}")
     grads = {v: [] for v in variants}
     n_ep = 4000
     for _ in range(n_ep):
         S, A, Rw = episode3(theta, r, T)
         G = discounted_returns(Rw, gamma)
-        ws = {"full return": np.full(T, G[0]), "reward-to-go": G, "reward-to-go + baseline": G - V_pi[S]}
+        ws = {"full return": np.full(T, G[0]), "reward-to-go": G, "reward-to-go + baseline": G - b_const}
         for v in variants:
             grads[v].append(policy_grad_episode(theta, S, A, ws[v]).ravel())
     stats = []
@@ -561,7 +563,7 @@ def fig_reinforce_estimators():
         stats.append((mean_norm, total_var, math.sqrt(total_var) / mean_norm))
         print(f"{v:26s}: ||mean grad|| = {mean_norm:.4f}, total variance = {total_var:.3f}, noise/signal = {math.sqrt(total_var)/mean_norm:.2f}")
     ax = axes[1]
-    bar(ax, ["full\nreturn", "reward-\nto-go", "reward-to-go\n+ baseline"], [s[1] for s in stats], color=BLUE, label_fmt="{:.2f}")
+    bar(ax, ["full\nreturn", "reward-\nto-go", "reward-to-go\n+ constant baseline"], [s[1] for s in stats], color=BLUE, label_fmt="{:.2f}")
     ax.set_ylabel("total variance of the one-episode gradient estimate")
     ax.set_title(f"Gradient noise at a fixed policy ({n_ep} episodes)")
     save(fig, NB, "reinforce_estimators")
