@@ -260,7 +260,11 @@ def fig_tensorboard_step_loss_and_lr():
     steps = np.arange(total)
     lr = one_cycle_lr(steps, total, max_lr)
     peak = int(np.argmax(lr))
-    print(f"  one-cycle schedule: {steps_per_epoch} steps/epoch x {epochs} epochs = {total} steps, max_lr {max_lr:g}")
+    print(f"  one-cycle schedule (illustration): {steps_per_epoch} steps/epoch x {epochs} epochs = {total} steps, max_lr {max_lr:g}")
+    for n_train, n_epochs, tag in ((6_000, 1, "FAST_RUN"), (55_000, 3, "full run")):
+        spe = -(-n_train // 128)                     # ceil(n_train / batch size), drop_last=False
+        print(f"  notebook Section 3.2 demo ({tag}): ceil({n_train}/128) = {spe} steps/epoch x {n_epochs} epoch(s) = {spe * n_epochs} steps")
+    print("  notebook Section 4 TensorBoard demo: AdamW, no scheduler, train/lr flat at 0.002")
     print(f"   initial lr = max_lr/25 = {lr[0]:.2e}; peak lr {lr[peak]:.2e} at step {peak} (30 % of the run); "
           f"final lr = initial/1e4 = {lr[-1]:.2e}; lr at step 100 = {lr[100]:.2e}")
 
@@ -281,7 +285,7 @@ def fig_tensorboard_step_loss_and_lr():
     ax2.plot(steps, lr, color=SERIES[0])
     ax2.annotate(f"peak {lr[peak]:.1e} at step {peak}", (peak, lr[peak]), xytext=(12, -2), textcoords="offset points", fontsize=8, color=INK_2)
     ax2.annotate(f"start {lr[0]:.1e}", (0, lr[0]), xytext=(6, 6), textcoords="offset points", fontsize=8, color=INK_2)
-    ax2.set_xlabel("optimizer step"); ax2.set_ylabel("learning rate"); ax2.set_title("train/lr: OneCycleLR over 141 steps (exact)")
+    ax2.set_xlabel("optimizer step"); ax2.set_ylabel("learning rate"); ax2.set_title("train/lr: OneCycleLR, 141-step illustration (exact formula)")
     save(fig, NB, "tensorboard_step_loss_and_lr")
 
 

@@ -455,7 +455,7 @@ def fig_perplexity():
     fig, ax = plt.subplots()
     ax.plot(ce, np.exp(ce), color=SERIES[0])
     for x_, label, off, ha in [(math.log(65), "uniform over 65 characters", (-8, 6), "right"),
-                               (2.5, "character frequencies only (about 12)", (-8, 6), "right"),
+                               (2.5, "character bigram statistics only (about 12)", (-8, 6), "right"),
                                (1.4, "good character LSTM (about 4)", (-8, 8), "right"),
                                (nll.mean(), f"six-character example ({math.exp(nll.mean()):.2f})", (10, -2), "left")]:
         ax.plot([x_], [math.exp(x_)], marker="o", color=SERIES[0], markersize=7, markeredgecolor=SURFACE, markeredgewidth=1.2)

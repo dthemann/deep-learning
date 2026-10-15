@@ -260,7 +260,7 @@ Run directory `runs/YYYYMMDD-HHMMSS_mlp_tb_demo/`: `config.json`, `config.yaml` 
 
 **Smoothing, as the TensorBoard slider does it.** Six raw step losses 2.3, 2.1, 2.25, 1.9, 1.95, 1.7 with smoothing weight 0.6 (an exponential moving average, debiased for the first points) become 2.3, 2.175, 2.213, 2.069, 2.018, 1.884. The smoothed curve lags the raw one but is readable; the raw curve is what to look at when hunting a spike.
 
-**The learning rate you should always log.** The notebook's `OneCycleLR` with `max_lr=2e-3` over 47 steps per epoch x 3 epochs = 141 steps starts at max_lr / 25 = 8.00e-05, rises with a cosine to the peak 2.00e-03 at step 42 (30 % of the run), and anneals to 8.00e-09 (initial / 10,000) at the last step; at step 100 it is 7.07e-04. If the logged `train/lr` curve does not look like this, the scheduler is stepped in the wrong place.
+**The learning rate you should always log.** For illustration, take a one-cycle schedule (`OneCycleLR`) with `max_lr=2e-3` over 47 steps per epoch x 3 epochs = 141 steps: it starts at max_lr / 25 = 8.00e-05, rises with a cosine to the peak 2.00e-03 at step 42 (30 % of the run), and anneals to 8.00e-09 (initial / 10,000) at the last step; at step 100 it is 7.07e-04. The notebook's own runs are longer or shorter but have the same shape: the Section 3.2 demo has 47 steps per epoch (6,000 images / 128) x 1 epoch = 47 steps under `FAST_RUN` and 430 steps per epoch (55,000 / 128) x 3 epochs = 1,290 steps in the full run, and the Section 4 TensorBoard demo run uses no scheduler at all, so its `train/lr` is a flat line at 0.002. If a logged `train/lr` curve under `OneCycleLR` does not look like the chart, the scheduler is stepped in the wrong place.
 
 ### Chart
 
