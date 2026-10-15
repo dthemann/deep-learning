@@ -499,6 +499,7 @@ def fig_scaling():
     for N in [1e7, 1e8, 1e9, 1e10, 1e11]:
         print(f"Kaplan law L(N) = (Nc/N)^0.076 at N = {N:.0e}: {(Nc / N) ** alpha:.3f} nats")
     print("GPT-3 tokens per parameter: 300e9 / 175e9 =", round(300 / 175, 2), "| Chinchilla: 1.4e12 / 70e9 =", 1.4e12 / 70e9)
+    print("6N rule for a 7B model on 2T tokens: 6 * 7e9 * 2e12 =", f"{6 * 7e9 * 2e12:.2e}", "FLOPs")
 
     fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.0))
     ax = axes[0]
