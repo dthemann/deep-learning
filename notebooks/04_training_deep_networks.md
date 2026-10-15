@@ -24,13 +24,13 @@
 
 ```mermaid
 flowchart LR
-    S1["1. Mini-batch SGD<br/>noise = lr / batch"] --> S2["2. Optimizers<br/>momentum, adaptive, AdamW"]
-    S2 --> S3["3. LR schedules<br/>range test, warmup, cosine"]
-    S3 --> S4["4. Initialization<br/>variance propagation"]
-    S4 --> S5["5. Normalization<br/>BatchNorm, LayerNorm"]
-    S5 --> S6["6. Regularization<br/>decay, dropout, stopping, aug"]
-    S6 --> S7["7. Diagnosing<br/>loss shapes, dead units, NaN"]
-    S7 --> S8["8. Hyperparameter search<br/>random, log-uniform"]
+    S1["1. Mini-batch SGD, noise = lr / batch"] --> S2["2. Optimizers, momentum, adaptive, AdamW"]
+    S2 --> S3["3. LR schedules, range test, warmup, cosine"]
+    S3 --> S4["4. Initialization, variance propagation"]
+    S4 --> S5["5. Normalization, BatchNorm, LayerNorm"]
+    S5 --> S6["6. Regularization, decay, dropout, stopping, aug"]
+    S6 --> S7["7. Diagnosing, loss shapes, dead units, NaN"]
+    S7 --> S8["8. Hyperparameter search, random, log-uniform"]
     S1 -. "noise ball shrinks with lr" .-> S3
     S4 -. "norm layers replace careful init" .-> S5
     S6 -. "overfitting curve" .-> S7
