@@ -157,16 +157,19 @@ def fig_timeline():
         print(f"  {y}  {label.replace(chr(10), ' '):<36} gap: {'-' if gap is None else gap}")
     print(f"  mean gap before 2012: {np.mean(gaps[:3]):.1f} years | mean gap from 2012 on: {np.mean(gaps[3:]):.1f} years")
 
-    fig, ax = plt.subplots(figsize=(9.5, 3.4))
-    ax.hlines(0, 1955, 2026, color=AXIS, linewidth=1)
+    # label positions (x, y): two tiers above and below the line so the dense 2012-2023 cluster stays legible
+    label_pos = {1958: (1958, 0.55), 1986: (1986, -0.55), 1998: (1998, 0.55), 2012: (2010, -0.55),
+                 2015: (2013, 0.55), 2017: (2017, -1.65), 2018: (2020, 1.65), 2020: (2023, -0.55), 2023: (2025, 0.55)}
+    fig, ax = plt.subplots(figsize=(11, 4.0))
+    ax.hlines(0, 1955, 2029, color=AXIS, linewidth=1)
     ax.scatter(years, [0] * len(years), s=60, zorder=3, color=BLUE)
-    for i, (year, label) in enumerate(MILESTONES):
-        offset = 0.6 if i % 2 == 0 else -0.6
-        ax.annotate(f"{year}\n{label}", (year, 0), (year, offset), ha="center",
-                    va="bottom" if offset > 0 else "top", fontsize=8, color=INK_2,
+    for year, label in MILESTONES:
+        lx, ly = label_pos[year]
+        ax.annotate(f"{year}\n{label}", (year, 0), (lx, ly), ha="center",
+                    va="bottom" if ly > 0 else "top", fontsize=8, color=INK_2,
                     arrowprops=dict(arrowstyle="-", color=AXIS, lw=0.8))
     ax.annotate(f"{gaps[0]} quiet years", ((1958 + 1986) / 2, -0.12), ha="center", va="top", fontsize=8, color=MUTED)
-    ax.set_ylim(-2.2, 2.2); ax.set_xlim(1955, 2027)
+    ax.set_ylim(-2.7, 2.8); ax.set_xlim(1954, 2030)
     ax.set_yticks([]); ax.grid(False)
     ax.set_xlabel("year"); ax.set_title("A compressed history of deep learning")
     for side in ["left", "right", "top"]:
@@ -292,9 +295,8 @@ def fig_moons_dataset():
     m0, m1 = Y_TR[:, 0] == 0, Y_TR[:, 0] == 1
     ax.scatter(X_TR[m0, 0], X_TR[m0, 1], s=14, color=BLUE, label="class 0", edgecolors=SURFACE, linewidths=0.4)
     ax.scatter(X_TR[m1, 0], X_TR[m1, 1], s=14, color=ORANGE, label="class 1", edgecolors=SURFACE, linewidths=0.4)
-    ax.annotate("rows 0 to 5 of the sample table", (X_TR[:6, 0].mean(), X_TR[:6, 1].mean()),
-                xytext=(0.1, 1.55), fontsize=8, color=INK_2, arrowprops=dict(arrowstyle="-", color=MUTED, lw=0.8))
-    ax.scatter(X_TR[:6, 0], X_TR[:6, 1], s=70, facecolors="none", edgecolors=INK, linewidths=0.8)
+    ax.scatter(X_TR[:6, 0], X_TR[:6, 1], s=70, facecolors="none", edgecolors=INK, linewidths=0.8,
+               label="rows 0 to 5 (sample table)")
     ax.set_xlabel("$x_1$"); ax.set_ylabel("$x_2$"); ax.set_title("The two-moons training set (1000 points, noise 0.2)")
     ax.legend(loc="upper right")
     save(fig, NB, "moons_dataset")
@@ -436,7 +438,7 @@ def fig_width_and_noise_sweeps():
     ax_n.set_xlabel("noise level of make_moons"); ax_n.set_ylabel("accuracy")
     ax_n.set_title("Exercise 4: generalisation gap versus noise"); ax_n.set_ylim(0.5, 1.02); ax_n.legend(loc="lower left")
     k = noises.index(0.5)
-    ax_n.annotate(f"gap {n_tr[k] - n_te[k]:+.3f}", (noises[k], (n_tr[k] + n_te[k]) / 2), xytext=(-60, 0),
+    ax_n.annotate(f"gap {n_tr[k] - n_te[k]:+.3f}", (noises[k], (n_tr[k] + n_te[k]) / 2), xytext=(-80, -30),
                   textcoords="offset points", fontsize=8, color=INK_2, arrowprops=dict(arrowstyle="-", color=MUTED, lw=0.8))
     save(fig, NB, "width_and_noise_sweeps")
 
