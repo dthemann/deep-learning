@@ -208,9 +208,8 @@ def fig_decision_matrix():
         ax.text(cx + 0.5, cy + 0.84, title, ha="center", va="center", fontsize=9.5, fontweight="bold", color=col)
         ax.text(cx + 0.5, cy + 0.42, body, ha="center", va="center", fontsize=8.8, color=INK_2)
         print(f"  {title:30s} -> {body.replace(chr(10), ' ')}")
-    ax.plot([0.22], [1.78], marker="o", color=INK, markersize=7)
-    ax.annotate("Notebook 07: CIFAR-10 at 96 px\n(10k images, similar to ImageNet)", (0.22, 1.78), xytext=(0.3, 1.93),
-                fontsize=7.5, color=INK, va="center")
+    ax.plot([0.16], [1.14], marker="o", color=INK, markersize=7)
+    ax.text(0.22, 1.14, "Notebook 07: CIFAR-10 at 96 px (10k images)", fontsize=7.5, color=INK, va="center")
     ax.set_xlim(0, 2); ax.set_ylim(0, 2)
     ax.set_xticks([0.5, 1.5]); ax.set_xticklabels(["similar to source\n(natural photos)", "different from source\n(medical, satellite, sketches)"])
     ax.set_yticks([0.5, 1.5]); ax.set_yticklabels(["large\n(tens of\nthousands+)", "small\n(hundreds to\na few thousand)"])
@@ -255,11 +254,11 @@ def fig_feature_reuse_vs_data():
     for k, n in enumerate(names):
         ax.plot(sizes, [100 * a for a in table[n]], marker=markers[k], color=SERIES[k], label=n)
     ax.axhline(100 / N_TGT, color=MUTED, linestyle=":", linewidth=1)
-    ax.text(sizes[-1], 100 / N_TGT + 1.2, "chance (25 %)", ha="right", fontsize=8, color=MUTED)
-    ax.set_xscale("log"); ax.set_xticks(sizes); ax.set_xticklabels([str(s) for s in sizes])
+    ax.text(sizes[0], 100 / N_TGT + 1.2, "chance (25 %)", ha="left", fontsize=8, color=MUTED)
+    ax.set_xscale("log"); ax.set_xticks(sizes); ax.set_xticklabels([str(s) for s in sizes]); ax.minorticks_off()
     ax.set_xlabel("labelled target examples (log scale)"); ax.set_ylabel("target test accuracy (%)")
     ax.set_title("Reusing features beats learning them when target data are scarce (numpy toy task)")
-    ax.legend(loc="lower right")
+    ax.legend(loc="upper left")
     save(fig, NB, "feature_reuse_vs_data")
     return table
 
@@ -300,7 +299,7 @@ def fig_resnet18_modules():
     print("  ImageNet normalisation (x/255 - mean) / std for sample uint8 pixels:")
     for px in pixels:
         scaled = px / 255.0; normed = (scaled - mean) / std
-        print(f"    uint8 {tuple(px)} -> [0,1] {np.round(scaled, 4)} -> normalised {np.round(normed, 3)}")
+        print(f"    uint8 {tuple(int(v) for v in px)} -> [0,1] {np.round(scaled, 4)} -> normalised {np.round(normed, 3)}")
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), gridspec_kw={"width_ratios": [1.1, 1]})
     names = [m for m, _ in mods][::-1]; vals = [p / 1e6 for _, p in mods][::-1]
     axes[0].barh(names, vals, color=BLUE, edgecolor=SURFACE)
@@ -345,7 +344,7 @@ def fig_lr_groups_and_schedule():
     axes[0].tick_params(axis="x", labelsize=8)
     axes[1].plot(t, mult, color=BLUE)
     axes[1].axvline(warm, color=MUTED, linestyle=":", linewidth=1)
-    axes[1].annotate(f"end of warm-up\n(step {warm})", (warm, 1.0), xytext=(warm + 90, 0.93), fontsize=8, color=INK_2,
+    axes[1].annotate(f"end of warm-up\n(step {warm})", (warm, 1.0), xytext=(warm + 130, 0.78), fontsize=8, color=INK_2,
                      arrowprops=dict(arrowstyle="->", color=MUTED, lw=0.8))
     for e in range(1, epochs):
         axes[1].axvline(e * steps_per_epoch, color=GRID, linewidth=0.8)
@@ -370,7 +369,7 @@ def fig_finetune_learning_curves():
     ax.axhline(25, color=MUTED, linestyle=":", linewidth=1)
     ax.set_xlabel("Adam steps on the 100 target examples (full batch)"); ax.set_ylabel("target test accuracy (%)")
     ax.set_title("Learning curves with 100 labelled examples (toy task, mean of 3 seeds)")
-    ax.legend(loc="lower right")
+    ax.legend(loc="center right")
     save(fig, NB, "finetune_learning_curves")
 
 
