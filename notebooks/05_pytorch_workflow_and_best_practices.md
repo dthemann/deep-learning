@@ -23,31 +23,31 @@
 
 ```mermaid
 flowchart LR
-    A["1. nn.Module<br/>parameters, buffers, state_dict"] --> C["3. Training loop<br/>train_one_epoch / evaluate / fit"]
-    B["2. Dataset + DataLoader<br/>batching, transforms, samplers"] --> C
-    C --> D["4. TensorBoard logging<br/>scalars, images, hparams"]
-    C --> E["5. Checkpointing<br/>save and resume exactly"]
-    C --> F["6. Reproducibility<br/>seeds, determinism, several seeds"]
-    D --> G["7. FashionMNIST project<br/>run_experiment(config)"]
+    A["1. nn.Module : parameters, buffers, state_dict"] --> C["3. Training loop : train_one_epoch / evaluate / fit"]
+    B["2. Dataset + DataLoader : batching, transforms, samplers"] --> C
+    C --> D["4. TensorBoard logging : scalars, images, hparams"]
+    C --> E["5. Checkpointing : save and resume exactly"]
+    C --> F["6. Reproducibility : seeds, determinism, several seeds"]
+    D --> G["7. FashionMNIST project : run_experiment(config)"]
     E --> G
     F --> G
-    G --> H["8. Debugging<br/>shapes, nan, hooks, overfit one batch"]
-    H --> I["9. Project structure<br/>package, configs, scripts, tests"]
+    G --> H["8. Debugging : shapes, nan, hooks, overfit one batch"]
+    H --> I["9. Project structure : package, configs, scripts, tests"]
 ```
 
 The loop at the centre of the notebook, as `fit` runs it every epoch:
 
 ```mermaid
 flowchart TD
-    S([start epoch]) --> T["train_one_epoch<br/>model.train(), forward, loss, finite check,<br/>zero_grad, backward, clip, step, scheduler.step()"]
-    T --> V["evaluate<br/>model.eval(), inference_mode, mean loss and metric"]
+    S([start epoch]) --> T["train_one_epoch : model.train(), forward, loss, finite check, : zero_grad, backward, clip, step, scheduler.step()"]
+    T --> V["evaluate : model.eval(), inference_mode, mean loss and metric"]
     V --> H["append to history, log to TensorBoard"]
     H --> Q{"val loss improved?"}
     Q -- yes --> K["save best weights (ckpt_path), bad_epochs = 0"]
     Q -- no --> P["bad_epochs += 1"]
     K --> CB["callbacks.on_epoch_end(state)"]
     P --> CB
-    CB --> E{"stop? (patience reached<br/>or a callback said so)"}
+    CB --> E{"stop? (patience reached : or a callback said so)"}
     E -- no --> S
     E -- yes --> R["reload best weights, return history"]
 ```
@@ -254,7 +254,7 @@ The configuration dictionary the notebook saves next to the Section 4 demo run, 
 | epochs | 1 (FAST_RUN) or 3 |
 | seed | 42 |
 
-Run directory `runs/<YYYYMMDD-HHMMSS>_mlp_tb_demo/`: `config.json`, `config.yaml` (if PyYAML is installed), `best.pt`, and the `events.out.tfevents...` file.
+Run directory `runs/YYYYMMDD-HHMMSS_mlp_tb_demo/`: `config.json`, `config.yaml` (if PyYAML is installed), `best.pt`, and the `events.out.tfevents...` file.
 
 ### Worked example
 
@@ -537,13 +537,13 @@ The six groups hold 704 lines in total; the training engine is the largest at 19
 
 ```mermaid
 flowchart LR
-    CFG["configs/mlp.yaml<br/>model, data, optimizer, seed"] --> TR["scripts/train.py"]
-    TR --> D["data.py<br/>build_loaders(config)"]
-    TR --> M["models.py<br/>build_model(config)"]
-    TR --> E["engine.py<br/>fit(...)"]
-    E --> CK["checkpoint.py<br/>save / load / seed"]
-    E --> RUN["runs/&lt;timestamp&gt;_tag/<br/>config, events, best.pt, results.json"]
-    T["tests/<br/>shapes, overfit one batch"] -.pytest before every long job.-> TR
+    CFG["configs/mlp.yaml : model, data, optimizer, seed"] --> TR["scripts/train.py"]
+    TR --> D["data.py : build_loaders(config)"]
+    TR --> M["models.py : build_model(config)"]
+    TR --> E["engine.py : fit(...)"]
+    E --> CK["checkpoint.py : save / load / seed"]
+    E --> RUN["runs/TIMESTAMP_tag/ : config, events, best.pt, results.json"]
+    T["tests/ : shapes, overfit one batch"] -.pytest before every long job.-> TR
 ```
 
 ### Chart
