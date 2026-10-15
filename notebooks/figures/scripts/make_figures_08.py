@@ -19,7 +19,7 @@ apply_style()
 rng = np.random.default_rng(0)
 
 import math
-from matplotlib.lines import Line2D
+from matplotlib.ticker import NullFormatter
 from matplotlib.patches import Circle, FancyArrowPatch
 
 NB = "08"
@@ -207,16 +207,22 @@ def fig_rnn_forward_one_unit():
         print(name)
         for t, xt, a, h in rows:
             print(f"  t={t}: x_t={'-' if xt is None else f'{xt:+.2f}'}  a_t={'-' if a is None else f'{a:+.4f}'}  h_t={h:+.4f}")
+    hs = [r[3] for r in runs["inputs 1.0, 0.5, -1.0"]]
+    factors = [(1 - hs[t] ** 2) * w_hh for t in (2, 3)]
+    print("BPTT by hand for the first run: dh_t/dh_(t-1) = (1 - h_t^2) * w_hh")
+    print(f"  t=2: (1 - {hs[2]:+.4f}^2) * 0.5 = {factors[0]:.4f} | t=3: (1 - {hs[3]:+.4f}^2) * 0.5 = {factors[1]:.4f} | "
+          f"dh_3/dh_1 = product = {factors[0] * factors[1]:.4f}; with w_hh = 1.5 instead: {factors[0] * 3 * factors[1] * 3:.4f}")
+    print(f"  parameter count of the notebook's cell (H=8, D=5): H*D + H*H + H = {8 * 5 + 8 * 8 + 8}; nn.RNN has one more bias vector: {8 * 5 + 8 * 8 + 2 * 8}")
     fig, ax = plt.subplots()
     for (name, rows), c, m in zip(runs.items(), SERIES[:2], ["o", "s"]):
         hs = [r[3] for r in rows]
         ax.plot(range(len(hs)), hs, marker=m, color=c, label=name)
         ax.annotate(f"h_3 = {hs[-1]:+.3f}", (3, hs[-1]), xytext=(6, 0), textcoords="offset points", fontsize=8, color=INK_2, va="center")
     ax.axhline(0, color=AXIS, linewidth=0.8)
-    ax.set_xticks(range(4)); ax.set_xlim(-0.2, 3.9)
+    ax.set_xticks(range(4)); ax.set_xlim(-0.2, 3.9); ax.set_ylim(-1.1, 0.85)
     ax.set_xlabel("time step t"); ax.set_ylabel("hidden state h_t")
     ax.set_title("One hidden unit, three steps: the order of the inputs changes the state")
-    ax.legend(loc="lower left")
+    ax.legend(loc="lower right")
     save(fig, NB, "rnn_forward_pass_one_unit")
 
 
@@ -422,11 +428,13 @@ def fig_delayed_recall():
     print(f"T = 30 | LSTM with forget bias 0 (f = 0.5): {acc_fb0:.3f}")
     fig, ax = plt.subplots()
     for (name, accs), c, m in zip(results.items(), SERIES[:2], ["o", "s"]):
-        ax.plot(lengths, accs, marker=m, color=c, label=name)
-    ax.plot([30], [acc_fb0], marker="D", color=SERIES[2], linestyle="none", label="LSTM with forget bias 0, T = 30")
+        ax.plot(lengths, accs, marker=m, color=c, markeredgecolor=SURFACE, markeredgewidth=1.2, label=name)
+    ax.plot([30], [acc_fb0], marker="D", color=SERIES[2], markeredgecolor=SURFACE, markeredgewidth=1.2, linestyle="none",
+            label="LSTM with forget bias 0, T = 30")
     ax.axhline(0.25, color=MUTED, linewidth=0.9)
     ax.annotate("chance (25%)", (lengths[0], 0.25), xytext=(0, 4), textcoords="offset points", fontsize=8, color=INK_2)
     ax.set_xscale("log"); ax.set_xticks(lengths); ax.set_xticklabels([str(l) for l in lengths])
+    ax.xaxis.set_minor_formatter(NullFormatter())
     ax.set_ylim(0, 1.05); ax.set_xlabel("sequence length T (log scale)"); ax.set_ylabel("test accuracy (1,000 sequences)")
     ax.set_title(f"Delayed recall: accuracy versus length ({steps} training steps per run)")
     ax.legend(loc="center left")
@@ -446,10 +454,12 @@ def fig_perplexity():
     ce = np.linspace(0, 4.5, 200)
     fig, ax = plt.subplots()
     ax.plot(ce, np.exp(ce), color=SERIES[0])
-    for x_, label in [(math.log(65), "uniform over 65 characters"), (2.5, "character frequencies only (about 12)"),
-                      (1.4, "good character LSTM (about 4)"), (nll.mean(), f"six-character example ({math.exp(nll.mean()):.2f})")]:
-        ax.plot([x_], [math.exp(x_)], marker="o", color=SERIES[0], markersize=7)
-        ax.annotate(label, (x_, math.exp(x_)), xytext=(-8, 6), textcoords="offset points", ha="right", fontsize=8, color=INK_2)
+    for x_, label, off, ha in [(math.log(65), "uniform over 65 characters", (-8, 6), "right"),
+                               (2.5, "character frequencies only (about 12)", (-8, 6), "right"),
+                               (1.4, "good character LSTM (about 4)", (-8, 8), "right"),
+                               (nll.mean(), f"six-character example ({math.exp(nll.mean()):.2f})", (10, -2), "left")]:
+        ax.plot([x_], [math.exp(x_)], marker="o", color=SERIES[0], markersize=7, markeredgecolor=SURFACE, markeredgewidth=1.2)
+        ax.annotate(label, (x_, math.exp(x_)), xytext=off, textcoords="offset points", ha=ha, fontsize=8, color=INK_2)
     ax.set_xlabel("cross-entropy (nats per character)"); ax.set_ylabel("perplexity = exp(cross-entropy)")
     ax.set_title("Perplexity is the exponential of the mean next-character loss")
     save(fig, NB, "perplexity_vs_cross_entropy")
@@ -552,7 +562,7 @@ def fig_forecast_one_step():
     ax.plot(t_test, F["p_naive"][show] * sigma + mu, color=SERIES[0], linewidth=1.2, alpha=0.9, label="naive (repeat last value)")
     ax.plot(t_test, F["p_mlp"][show] * sigma + mu, color=SERIES[1], linewidth=1.2, label="numpy MLP on the 48-value window")
     ax.set_xlabel("time step"); ax.set_ylabel("value"); ax.set_title("One-step-ahead forecasts on the first 200 test points")
-    ax.legend(loc="upper left", ncol=3)
+    ax.set_ylim(top=ax.get_ylim()[1] + 0.8); ax.legend(loc="upper left", ncol=3)
     save(fig, NB, "forecast_one_step_test_period")
 
 
@@ -582,7 +592,7 @@ def fig_forecast_rollout():
     ax.plot(t_roll, roll_lin, color=SERIES[0], linewidth=1.2, label="linear AR(48) rollout")
     ax.plot(t_roll, roll_mlp, color=SERIES[1], linewidth=1.2, label="numpy MLP rollout")
     ax.set_xlabel("time step"); ax.set_ylabel("value"); ax.set_title("100-step forecasts: each prediction is fed back as the next input")
-    ax.legend(loc="upper left", ncol=3)
+    ax.set_ylim(top=ax.get_ylim()[1] + 0.8); ax.legend(loc="upper left", ncol=3)
     save(fig, NB, "forecast_rollout_100_steps")
 
 
@@ -656,11 +666,13 @@ def fig_seq2seq_bottleneck():
         accs = toy_memory_accuracy(H, lengths)
         print(f"H = {H:3d}: " + ", ".join(f"L={L}: {a:.3f}" for L, a in zip(lengths, accs) if L in (2, 4, 6, 8, 10, 12, 16, 20)))
         ax.plot(lengths, accs, marker=m, markersize=5, color=c, label=f"memory size H = {H}")
-    ax.set_ylim(0, 1.05); ax.set_xlabel("number of digits stored in one vector (sequence length L)"); ax.set_ylabel("exact-match recall accuracy")
+    ax.set_ylim(0, 1.05); ax.set_xticks(range(2, 21, 2)); ax.set_xlabel("number of digits stored in one vector (sequence length L)"); ax.set_ylabel("exact-match recall accuracy")
     ax.set_title("A fixed-size vector holds only so many digits"); ax.legend(loc="upper right")
     ax = axes[1]
     L = 6
     src = [7, 2, 9, 4, 0, 5]
+    print(f"reversal example: source {src} | target {src[::-1]} | decoder input ['<sos>'] + target = {['<sos>'] + src[::-1]} | "
+          f"decoder target = target + ['<eos>'] = {src[::-1] + ['<eos>']}")
     A = np.full((L, L), 0.02); A[np.arange(L), L - 1 - np.arange(L)] = 0.9
     A /= A.sum(axis=1, keepdims=True)
     print(f"idealised attention for reversing {src}: output step t reads source position L+1-t (1-indexed); row sums {np.round(A.sum(axis=1), 2).tolist()}")

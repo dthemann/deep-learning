@@ -474,9 +474,9 @@ def fig_vgg_stage_costs():
     names = [n for n, _, _ in rows]
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
     bar(axes[0], names, [p for _, p, _ in rows], color=SERIES[0])
-    axes[0].set_yscale("log"); axes[0].set(ylabel="parameters (log scale)", title="Parameters per layer: the first dense layer dominates")
+    axes[0].set_yscale("log"); axes[0].set(ylabel="parameters (log scale)", title="Parameters per layer (fc1 dominates)")
     bar(axes[1], names, [m / 1e6 for _, _, m in rows], color=SERIES[0])
-    axes[1].set(ylabel="multiply-accumulates (millions)", title="MACs per layer: halve resolution, double width = constant cost")
+    axes[1].set(ylabel="multiply-accumulates (millions)", title="MACs per layer (constant across stages)")
     for ax in axes:
         ax.tick_params(axis="x", rotation=40)
         for lbl in ax.get_xticklabels():
@@ -584,53 +584,48 @@ def train_mlp(depth, width, residual, X, y, steps, lr, seed=0):
     return np.array(losses), float((pred == y).mean())
 
 
-def gradient_norms_at_init(depth, width, residual, X, y, seed=0):
-    p = make_mlp(depth, width, residual, seed)
-    _, g, _ = mlp_loss_grads(p, X, y)
-    return [np.linalg.norm(g["W"][l]) for l in range(depth)]
-
-
 def fig_plain_vs_residual_toy():
     print("\n=== fig_plain_vs_residual_toy ===")
     from sklearn.datasets import make_moons
     X, y = make_moons(n_samples=400, noise=0.15, random_state=0)
     X = (X - X.mean(axis=0)) / X.std(axis=0)
     y = y.astype(float)
-    width, steps, lr = 16, 300, 0.05
-    runs = [("plain, 2 hidden layers", 2, False, SERIES[0]), ("plain, 24 hidden layers", 24, False, SERIES[1]),
-            ("residual, 24 hidden layers", 24, True, SERIES[2])]
-    results = {}
-    seeds = (0, 1, 2)
-    print(f"two moons (400 points, noise 0.15), width {width}, full-batch SGD momentum 0.9, lr {lr}, {steps} steps, {len(seeds)} seeds")
-    print(f"{'network':28s} {'loss@50':>8s} {'loss@150':>9s} {'final loss':>11s} {'train acc':>10s}")
-    for name, depth, res, col in runs:
-        curves, accs = [], []
-        for s in seeds:
-            losses, acc = train_mlp(depth, width, res, X, y, steps, lr, seed=s)
-            curves.append(losses); accs.append(acc)
-        curves = np.array(curves); mean_curve = curves.mean(axis=0)
-        results[name] = (mean_curve, col)
-        print(f"{name:28s} {mean_curve[49]:>8.3f} {mean_curve[149]:>9.3f} {mean_curve[-1]:>11.3f} {100 * np.mean(accs):>9.1f}%")
-    gn_plain = gradient_norms_at_init(24, width, False, X, y)
-    gn_res = gradient_norms_at_init(24, width, True, X, y)
-    print("gradient norm of the weight matrix at initialisation (seed 0), layer 1 / layer 12 / layer 24:")
-    print(f"  plain-24   : {gn_plain[0]:.2e} / {gn_plain[11]:.2e} / {gn_plain[23]:.2e}  (ratio last/first {gn_plain[23] / gn_plain[0]:.1f})")
-    print(f"  residual-24: {gn_res[0]:.2e} / {gn_res[11]:.2e} / {gn_res[23]:.2e}  (ratio last/first {gn_res[23] / gn_res[0]:.1f})")
+    width, steps, lr, seeds = 16, 400, 0.03, (0, 1, 2)
+    depths = (2, 4, 8, 16, 24, 32)
+    print(f"two moons (400 points, noise 0.15), width {width}, full-batch SGD momentum 0.9, lr {lr}, {steps} steps, "
+          f"mean over {len(seeds)} seeds; residual branch scaled by 1/sqrt(depth) at init")
+    curves, final, accs = {}, {False: [], True: []}, {False: [], True: []}
+    print(f"{'depth':>5s} {'plain final loss':>16s} {'plain acc':>10s} {'residual final loss':>19s} {'residual acc':>13s}")
+    for depth in depths:
+        for res in (False, True):
+            cs, ac = [], []
+            for s in seeds:
+                losses, acc = train_mlp(depth, width, res, X, y, steps, lr, seed=s)
+                cs.append(losses); ac.append(acc)
+            curves[(depth, res)] = np.mean(cs, axis=0)
+            final[res].append(curves[(depth, res)][-1]); accs[res].append(100 * np.mean(ac))
+        print(f"{depth:>5d} {final[False][-1]:>16.3f} {accs[False][-1]:>9.1f}% {final[True][-1]:>19.3f} {accs[True][-1]:>12.1f}%")
+    show = [("plain, 2 hidden layers", (2, False), SERIES[0]), ("plain, 16 hidden layers", (16, False), SERIES[1]),
+            ("residual, 16 hidden layers", (16, True), SERIES[2])]
+    for name, key, _ in show:
+        c = curves[key]
+        print(f"  {name}: loss at step 100 = {c[99]:.3f}, step 200 = {c[199]:.3f}, step 400 = {c[-1]:.3f}")
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
-    for name, (curve, col) in results.items():
-        axes[0].plot(np.arange(1, steps + 1), curve, color=col, label=name)
+    for name, key, col in show:
+        axes[0].plot(np.arange(1, steps + 1), curves[key], color=col, label=name)
     axes[0].set(xlabel="training step", ylabel="training loss (binary cross-entropy)",
-                title="Toy degradation: deeper plain MLP trains worse, residual does not")
+                title="Deeper plain MLP trains worse; the residual one does not")
     axes[0].legend()
-    L = np.arange(1, 25)
-    axes[1].plot(L, gn_plain, marker="o", markersize=4, color=SERIES[1], label="plain, 24 layers")
-    axes[1].plot(L, gn_res, marker="s", markersize=4, color=SERIES[2], label="residual, 24 layers")
-    axes[1].set_yscale("log")
-    axes[1].set(xlabel="hidden layer (1 = nearest the input)", ylabel="gradient norm at initialisation (log)",
-                title="Gradient size per layer before training")
+    axes[1].plot(depths, final[False], marker="o", color=SERIES[1], label="plain")
+    axes[1].plot(depths, final[True], marker="s", color=SERIES[2], label="residual")
+    axes[1].set_xticks(depths)
+    axes[1].set(xlabel="number of hidden layers", ylabel="training loss after 400 steps (mean of 3 seeds)",
+                title="Final training loss versus depth")
+    axes[1].annotate(f"plain-16: {final[False][3]:.2f}", (16, final[False][3]), xytext=(8, 4), textcoords="offset points",
+                     fontsize=9, color=INK_2)
     axes[1].legend()
-    fig.suptitle("Numpy toy on two moons (not the notebook's CIFAR-10 experiment)", fontsize=10, color=INK_2, y=1.02)
+    fig.suptitle("Numpy toy on two moons (a stand-in for the notebook's CIFAR-10 experiment)", fontsize=10, color=INK_2, y=1.02)
     save(fig, NB, "plain_vs_residual_toy")
 
 
@@ -651,9 +646,12 @@ def fig_architecture_tour():
     print(f"accuracy per million parameters: VGG-16 {d['VGG-16'][2] / d['VGG-16'][0]:.2f}, MobileNetV2 {d['MobileNetV2'][2] / d['MobileNetV2'][0]:.1f}")
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.4))
-    offsets = {"ResNet-50": (6, -12), "ResNeXt-50": (6, 2), "GoogLeNet": (6, -10), "MobileNetV2": (6, 4),
-               "DenseNet-121": (6, 2), "EfficientNet-B0": (6, 4), "ConvNeXt-T": (6, 2), "VGG-16": (-42, 6), "AlexNet": (6, 2)}
-    for ax, idx, xlabel in [(axes[0], 0, "parameters (millions, log scale)"), (axes[1], 1, "forward-pass GFLOPs at 224x224 (log scale)")]:
+    offsets_params = {"ResNet-50": (6, -12), "ResNeXt-50": (6, 2), "GoogLeNet": (6, -10), "MobileNetV2": (6, 4),
+                      "DenseNet-121": (6, 2), "EfficientNet-B0": (6, 4), "ConvNeXt-T": (6, 2), "VGG-16": (-42, 6), "AlexNet": (6, 2)}
+    offsets_flops = dict(offsets_params, **{"ResNet-50": (6, -5), "ResNeXt-50": (6, 4), "DenseNet-121": (-72, -4),
+                                            "GoogLeNet": (6, -12)})
+    for ax, idx, xlabel, offsets in [(axes[0], 0, "parameters (millions, log scale)", offsets_params),
+                                     (axes[1], 1, "forward-pass GFLOPs at 224x224 (log scale)", offsets_flops)]:
         for n, _, p, f, a in tour:
             xval = (p, f)[idx]
             ax.scatter(xval, a, s=42, color=SERIES[0], zorder=3)
@@ -661,7 +659,7 @@ def fig_architecture_tour():
         ax.set_xscale("log"); ax.set(xlabel=xlabel, ylabel="ImageNet top-1 accuracy (%)")
     axes[0].set_title("Accuracy versus parameters"); axes[1].set_title("Accuracy versus compute")
     axes[1].annotate("", xy=(0.3, 71.9), xytext=(15.5, 71.6), arrowprops=dict(arrowstyle="->", color=SERIES[1], lw=1.2))
-    axes[1].text(1.6, 70.3, "same accuracy, 50x fewer FLOPs", fontsize=8, color=SERIES[1], ha="center")
+    axes[1].text(2.3, 70.5, "same accuracy, 50x fewer FLOPs", fontsize=8, color=SERIES[1], ha="center")
     save(fig, NB, "architecture_tour")
 
 
@@ -709,15 +707,16 @@ def fig_occlusion_toy():
     axes[0].imshow(img, cmap="gray", vmin=0, vmax=1); axes[0].set_title(f"toy image, score = {p_full:.2f}", fontsize=10)
     axes[0].add_patch(Rectangle((rows[amin[1]] - 0.5, rows[amin[0]] - 0.5), patch, patch, fill=False, edgecolor=SERIES[1], linewidth=2))
     im = axes[1].imshow(occ, cmap=SEQ_CMAP, vmin=0, vmax=1, extent=(-0.5, n - 0.5, n - 0.5, -0.5))
-    axes[1].set_title("score with an 8x8 patch hidden at each position", fontsize=10)
+    axes[1].set_title("score with an 8x8 patch hidden", fontsize=10)
     fig.colorbar(im, ax=axes[1], fraction=0.046, label="score")
     drop = p_full - occ
     im2 = axes[2].imshow(drop, cmap=SEQ_CMAP, vmin=0, vmax=max(drop.max(), 1e-3), extent=(-0.5, n - 0.5, n - 0.5, -0.5))
-    axes[2].set_title("drop in score (the evidence the model uses)", fontsize=10)
+    axes[2].set_title("drop in score = the evidence used", fontsize=10)
     fig.colorbar(im2, ax=axes[2], fraction=0.046, label="score drop")
     for ax in axes:
         ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
-    fig.suptitle("Occlusion sensitivity of a toy template-matching model (not a trained CNN)", fontsize=11, fontweight="bold")
+    fig.suptitle("Occlusion sensitivity of a toy template-matching model (not a trained CNN)", fontsize=11,
+                 fontweight="bold", y=1.03)
     save(fig, NB, "occlusion_toy")
 
 

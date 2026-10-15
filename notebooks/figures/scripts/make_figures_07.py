@@ -575,23 +575,22 @@ def fig_box_iou_and_nms():
     for i, (bx, s) in enumerate(zip(boxes, scores)):
         print(f"    box {i}: {bx.tolist()}  score {s:.2f}")
     print("  IoU matrix:\n" + "\n".join("    " + " ".join(f"{v:5.2f}" for v in row) for row in M))
-    order = list(np.argsort(-scores)); keep = []; step = 0
+    order = [int(i) for i in np.argsort(-scores)]; keep = []; step = 0
     print("  NMS with threshold 0.5:")
     while order:
         i = order[0]; keep.append(i); step += 1
         rest = order[1:]
-        ious = M[i, rest] if rest else np.array([])
+        ious = [float(M[i, j]) for j in rest]
         dropped = [j for j, u in zip(rest, ious) if u > 0.5]
         order = [j for j, u in zip(rest, ious) if u <= 0.5]
-        print(f"    step {step}: keep box {i} (score {scores[i]:.2f}); IoU with remaining {dict(zip(rest, np.round(ious, 2)))} -> drop {dropped}, left {order}")
+        shown = {j: round(u, 2) for j, u in zip(rest, ious)}
+        print(f"    step {step}: keep box {i} (score {scores[i]:.2f}); IoU with remaining {shown} -> drop {dropped}, left {order}")
     print(f"  kept: {keep}  (box 5 survives: its IoU with every kept box is below 0.5, a typical NMS false positive)")
 
     fig, axes = plt.subplots(1, 3, figsize=(12.5, 4.0))
     ax = axes[0]
     cols = [SERIES[0], SERIES[1], SERIES[2]]
-    for (name, p, q), col, dy in zip(pairs, cols, [0, 0, 0]):
-        pass
-    demo = [(a[0], b[0], "IoU 0.31"), (a[0], a[0] + 2, f"IoU {box_iou(a, a + 2)[0, 0]:.2f}"), (a[0], np.array([50., 50., 80., 85.]), "IoU 0.00")]
+    demo =[(a[0], b[0], "IoU 0.31"), (a[0], a[0] + 2, f"IoU {box_iou(a, a + 2)[0, 0]:.2f}"), (a[0], np.array([50., 50., 80., 85.]), "IoU 0.00")]
     offsets = [(0, 0), (60, 0), (0, 55)]
     for (p, q, label), (ox, oy), col in zip(demo, offsets, cols):
         for bx, ls in [(p, "-"), (q, "--")]:
@@ -604,7 +603,7 @@ def fig_box_iou_and_nms():
             x1, y1, x2, y2 = boxes[j]
             col = SEQ_CMAP(0.25 + 0.75 * (scores[j] - 0.5) / 0.4)
             ax.add_patch(Rectangle((x1, y1), x2 - x1, y2 - y1, fill=False, edgecolor=col, lw=1.8))
-            ax.text(x1 + 1, y1 - 1.5, f"{j}: {scores[j]:.2f}", fontsize=8, color=col)
+            ax.text(x1 + 1.5, y1 + 2 + 6 * (j % 3), f"box {j}: {scores[j]:.2f}", fontsize=8, color=col, va="top")
         ax.set_xlim(0, 100); ax.set_ylim(100, 0); ax.set_aspect("equal"); ax.grid(False)
         ax.set_title(title, fontsize=10); ax.set_xticks([]); ax.set_yticks([])
     save(fig, NB, "box_iou_and_nms")
