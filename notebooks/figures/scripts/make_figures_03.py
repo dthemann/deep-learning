@@ -183,7 +183,7 @@ def fig_broadcasting():
         ax.grid(False)
     for spine in axes[1].spines.values():
         spine.set_linestyle("--")
-    axes[1].text(1.5, -0.9, "virtual copies (no memory)", ha="center", fontsize=8, color=INK_2)
+    axes[1].text(1.5, 2.95, "rows 1 and 2 are virtual copies (no extra memory)", ha="center", va="top", fontsize=8, color=INK_2)
     fig.suptitle("Broadcasting: sizes are aligned from the right, size-1 dimensions are stretched",
                  fontsize=11, fontweight="bold")
     save(fig, NB, "broadcasting_outer_product")
@@ -194,33 +194,42 @@ def fig_broadcasting():
 # ---------------------------------------------------------------------------------------------
 def fig_matmul_scaling():
     banner("fig_matmul_scaling")
-    sizes = [64, 128, 256, 512, 1024]
+    try:                                   # pin BLAS to one thread so the timings are not scheduler noise
+        from threadpoolctl import threadpool_limits
+        limiter = threadpool_limits(limits=1)
+    except Exception:                      # threadpoolctl missing: time the multi-threaded BLAS instead
+        import contextlib; limiter = contextlib.nullcontext()
+    sizes = [64, 128, 256, 512, 1024, 2048]
     times = []
-    for n in sizes:
-        x = rng.standard_normal((n, n)).astype(np.float32)
-        _ = x @ x
-        reps = 10 if n <= 256 else 3
-        t0 = time.perf_counter()
-        for _ in range(reps):
-            _ = x @ x
-        times.append((time.perf_counter() - t0) / reps)
+    with limiter:
+        for n in sizes:
+            x = rng.standard_normal((n, n)).astype(np.float32)
+            _ = x @ x; _ = x @ x                           # warm-up
+            reps = 20 if n <= 512 else 3
+            ts = []
+            for _ in range(reps):
+                t0 = time.perf_counter(); _ = x @ x; ts.append(time.perf_counter() - t0)
+            times.append(min(ts))                         # the minimum is the least noisy estimate
     times = np.array(times)
+    print("one BLAS thread, float32, best of several repeats")
     print(f"{'n':>6s} {'ms':>10s} {'GFLOP':>8s} {'GFLOP/s':>8s}")
     for n, t in zip(sizes, times):
         flop = 2 * n ** 3
         print(f"{n:6d} {t * 1e3:10.3f} {flop / 1e9:8.3f} {flop / t / 1e9:8.1f}")
-    ratio = times[-1] / times[-2]
-    print(f"time ratio n=1024 / n=512 = {ratio:.1f}x (pure n^3 scaling predicts 8x; small n is overhead-dominated)")
-    ref = times[2] * (np.array(sizes) / sizes[2]) ** 3
+    print(f"doubling n from 1024 to 2048 multiplies the time by {times[-1] / times[-2]:.1f} (n^3 predicts 8)")
+    print(f"doubling n from 64 to 128 multiplies the time by {times[1] / times[0]:.1f} (small n: overhead-dominated)")
+    ref = times[3] * (np.array(sizes) / sizes[3]) ** 3
 
     fig, ax = plt.subplots(figsize=(7.5, 4.2))
-    ax.plot(sizes, times * 1e3, marker="o", color=SERIES[0], label="measured (numpy float32, this CPU)")
-    ax.plot(sizes, ref * 1e3, linestyle="--", color=SERIES[1], label="n³ reference through n = 256")
+    ax.plot(sizes, times * 1e3, marker="o", color=SERIES[0], label="measured (numpy float32, one CPU thread)")
+    ax.plot(sizes, ref * 1e3, linestyle="--", color=SERIES[1], label="n³ reference through n = 512")
     ax.set_xscale("log", base=2); ax.set_yscale("log")
     ax.set_xticks(sizes); ax.set_xticklabels([str(s) for s in sizes])
-    ax.set_xlabel("matrix size n (n × n times n × n)"); ax.set_ylabel("time per product (ms)")
+    ax.set_xlabel("matrix size n (an n × n times n × n product)"); ax.set_ylabel("time per product (ms)")
     ax.set_title("A dense matrix product costs about 2n³ flops")
-    ax.annotate(f"{times[-1] * 1e3:.0f} ms", (sizes[-1], times[-1] * 1e3), xytext=(-40, 8),
+    ax.annotate(f"{times[-1] * 1e3:.0f} ms", (sizes[-1], times[-1] * 1e3), xytext=(-42, 6),
+                textcoords="offset points", fontsize=9, color=INK_2)
+    ax.annotate(f"{times[0] * 1e6:.0f} µs", (sizes[0], times[0] * 1e3), xytext=(8, -4),
                 textcoords="offset points", fontsize=9, color=INK_2)
     ax.legend(loc="upper left")
     save(fig, NB, "matmul_time_vs_size")
@@ -327,8 +336,7 @@ def nums_worked_graph():
 # ---------------------------------------------------------------------------------------------
 class Neuron:
     def __init__(self, n_in, nonlin, r):
-        s = 1.0 / math.sqrt(n_in)
-        self.w = [Value(r.uniform(-1, 1) * s) for _ in range(n_in)]; self.b = Value(0.0); self.nonlin = nonlin
+        self.w = [Value(r.uniform(-1, 1)) for _ in range(n_in)]; self.b = Value(0.0); self.nonlin = nonlin   # micrograd init
     def __call__(self, x):
         act = sum((w * xi for w, xi in zip(self.w, x)), self.b)
         return act.tanh() if self.nonlin else act
@@ -377,11 +385,12 @@ def fig_value_engine_mlp():
 
     losses, accs = [], []
     t0 = time.perf_counter()
-    STEPS = 80
+    STEPS, LR = 120, 0.3
+    print(f"training: full-batch MSE on 40 points, lr = {LR}, {STEPS} steps")
     for s in range(1, STEPS + 1):
-        l, a, loss_node = step(0.5)
+        l, a, loss_node = step(LR)
         losses.append(l); accs.append(a)
-        if s in (1, 5, 10, 20, 40, 60, 80):
+        if s in (1, 5, 10, 20, 40, 60, 80, 100, 120):
             print(f"  step {s:3d} | MSE {l:.4f} | train acc {a:.3f}")
     sec_per_step = (time.perf_counter() - t0) / STEPS
     print(f"full-batch loss graph: {count_nodes(loss_node)} nodes | {sec_per_step * 1e3:.1f} ms per step (engine)")
@@ -410,9 +419,9 @@ def fig_value_engine_mlp():
     fig, axes = plt.subplots(1, 2, figsize=(9, 3.9), gridspec_kw={"width_ratios": [1.1, 1]})
     axes[0].plot(range(1, STEPS + 1), losses, color=SERIES[0])
     axes[0].set_xlabel("full-batch gradient step"); axes[0].set_ylabel("mean squared error")
-    axes[0].set_title("Loss of the Value-engine MLP (2-8-1)")
-    axes[0].annotate(f"step {STEPS}: MSE {losses[-1]:.3f}, acc {accs[-1]:.2f}", (STEPS, losses[-1]),
-                     xytext=(-10, 25), textcoords="offset points", ha="right", fontsize=8.5, color=INK_2,
+    axes[0].set_title("Loss of the Value-engine MLP (2-8-1, lr 0.3)")
+    axes[0].annotate(f"step {STEPS}: MSE {losses[-1]:.3f}, train acc {accs[-1]:.2f}", (STEPS, losses[-1]),
+                     xytext=(-30, 60), textcoords="offset points", ha="right", fontsize=8.5, color=INK_2,
                      arrowprops=dict(arrowstyle="-", color=AXIS))
     axes[1].contourf(xx, yy, zz, levels=[-10, 0, 10], colors=[SERIES[0], SERIES[1]], alpha=0.12)
     axes[1].contour(xx, yy, zz, levels=[0], colors=[INK_2], linewidths=1.0)
@@ -566,10 +575,14 @@ def fig_linear_regression():
             print(f"step {step}: loss {loss:.4f} | w = {w:.4f}, b = {b:.4f}")
     print(f"final |w - w_ls| = {abs(w - w_ls):.1e}, |b - b_ls| = {abs(b - b_ls):.1e}")
     fig, axes = plt.subplots(1, 2, figsize=(9, 3.9))
-    axes[0].plot(range(1, 201), losses, color=SERIES[0])
-    axes[0].set_yscale("log"); axes[0].set_xlabel("gradient step"); axes[0].set_ylabel("mean squared error")
+    loss_min = np.mean((X @ np.array([w_ls, b_ls]) - y) ** 2)
+    excess = np.maximum(np.array(losses) - loss_min, 1e-13)
+    print(f"least-squares MSE (the floor) = {loss_min:.4f}; MSE above the floor at step 1, 10, 50: {excess[0]:.3g}, {excess[9]:.3g}, {excess[49]:.3g}")
+    axes[0].plot(range(1, 201), excess, color=SERIES[0])
+    axes[0].set_yscale("log"); axes[0].set_xlabel("gradient step"); axes[0].set_ylabel(f"MSE minus its minimum ({loss_min:.3f})")
     axes[0].set_title("Loss falls geometrically (lr = 0.1)")
-    axes[0].annotate(f"step 200: {losses[-1]:.3f}", (200, losses[-1]), xytext=(-8, 12), textcoords="offset points", ha="right", fontsize=8.5, color=INK_2)
+    axes[0].annotate(f"step 10: {excess[9]:.3f} above the floor", (10, excess[9]), xytext=(20, 10), textcoords="offset points", fontsize=8.5, color=INK_2,
+                     arrowprops=dict(arrowstyle="-", color=AXIS))
     xs = np.linspace(-2.2, 2.2, 50)
     axes[1].scatter(x, y, color=INK_2, s=36, zorder=3, label="8 data points")
     for k, (si, color) in enumerate(zip([0, 1, 3, 10, 200], SERIES)):
@@ -628,42 +641,47 @@ def nums_mnist_params():
 def fig_optimizers_preview():
     banner("fig_optimizers_preview")
     r = np.random.default_rng(3)
-    x = np.round(r.uniform(-2, 2, 8), 2); y = np.round(3 * x - 2 + 0.5 * r.standard_normal(8), 2)
+    x = np.round(r.uniform(1, 5, 8), 2); y = np.round(3 * x - 2 + 0.5 * r.standard_normal(8), 2)
+    print("data x in [1, 5] (not centred, so slope and intercept are entangled):")
+    print("  x =", x); print("  y =", y)
     X = np.c_[x, np.ones_like(x)]
     theta_ls = np.linalg.lstsq(X, y, rcond=None)[0]
     loss_min = np.mean((X @ theta_ls - y) ** 2)
-    print(f"least-squares minimum loss = {loss_min:.4f}")
+    H = 2 * X.T @ X / len(y); ev = np.linalg.eigvalsh(H)
+    print(f"least squares: w = {theta_ls[0]:.4f}, b = {theta_ls[1]:.4f}, minimum MSE = {loss_min:.4f}")
+    print(f"Hessian eigenvalues {ev[0]:.3f}, {ev[1]:.3f} -> condition number {ev[1] / ev[0]:.0f}; plain SGD is stable only for lr < 2/{ev[1]:.2f} = {2 / ev[1]:.3f}")
     def grad(th):
         res = X @ th - y
-        return np.mean((res ** 2)), 2 * X.T @ res / len(y)
-    STEPS = 100
+        return np.mean(res ** 2), 2 * X.T @ res / len(y)
+    STEPS = 200
     curves = {}
-    # SGD
     th = np.zeros(2); c = []
     for _ in range(STEPS):
         l, g = grad(th); c.append(l); th -= 0.1 * g
     curves["SGD, lr 0.1"] = c
-    # SGD + momentum
     th = np.zeros(2); v = np.zeros(2); c = []
     for _ in range(STEPS):
-        l, g = grad(th); c.append(l); v = 0.9 * v + g; th -= 0.1 * v
-    curves["SGD + momentum 0.9, lr 0.1"] = c
-    # Adam
-    th = np.zeros(2); m = np.zeros(2); s = np.zeros(2); c = []
+        l, g = grad(th); c.append(l); v = 0.9 * v + g; th -= 0.03 * v
+    curves["SGD + momentum 0.9, lr 0.03"] = c
+    th = np.zeros(2); m = np.zeros(2); s2 = np.zeros(2); c = []
     b1, b2, eps = 0.9, 0.999, 1e-8
     for t in range(1, STEPS + 1):
         l, g = grad(th); c.append(l)
-        m = b1 * m + (1 - b1) * g; s = b2 * s + (1 - b2) * g ** 2
-        th -= 0.1 * (m / (1 - b1 ** t)) / (np.sqrt(s / (1 - b2 ** t)) + eps)
-    curves["Adam, lr 0.1"] = c
-    print(f"{'optimizer':>28s} {'loss@10':>9s} {'loss@30':>9s} {'loss@100':>9s}")
+        m = b1 * m + (1 - b1) * g; s2 = b2 * s2 + (1 - b2) * g ** 2
+        th -= 0.3 * (m / (1 - b1 ** t)) / (np.sqrt(s2 / (1 - b2 ** t)) + eps)
+    curves["Adam, lr 0.3"] = c
+    th = np.zeros(2); c = []
+    for _ in range(STEPS):
+        l, g = grad(th); c.append(l); th -= 0.15 * g
+    print(f"SGD with lr 0.15 (above the limit) after 10 steps: MSE = {c[9]:.3g}, after 200: {c[-1]:.3g}  -> diverges")
+    print(f"{'optimizer':>28s} {'MSE-min @10':>12s} {'@50':>10s} {'@100':>10s} {'@200':>10s}")
     for k, c in curves.items():
-        print(f"{k:>28s} {c[9]:9.4f} {c[29]:9.4f} {c[99]:9.4f}")
+        print(f"{k:>28s} {c[9] - loss_min:12.4g} {c[49] - loss_min:10.4g} {c[99] - loss_min:10.4g} {c[199] - loss_min:10.4g}")
     fig, ax = plt.subplots(figsize=(7.5, 4.2))
     for (k, c), color in zip(curves.items(), SERIES):
-        ax.plot(range(1, STEPS + 1), np.array(c) - loss_min, color=color, label=k)
-    ax.set_yscale("log"); ax.set_xlabel("step"); ax.set_ylabel("MSE minus its minimum")
-    ax.set_title("Same training loop, three one-line optimizer swaps")
+        ax.plot(range(1, STEPS + 1), np.maximum(np.array(c) - loss_min, 1e-12), color=color, label=k)
+    ax.set_yscale("log"); ax.set_xlabel("step"); ax.set_ylabel("MSE above its minimum")
+    ax.set_title("Same training loop, three one-line optimizer swaps (ill-conditioned fit)")
     ax.legend(loc="upper right")
     save(fig, NB, "optimizers_same_loop")
 

@@ -23,13 +23,13 @@
 
 ```mermaid
 flowchart LR
-    S1["1. Perceptron and XOR<br/>one neuron = one line"] --> S2["2. Activations<br/>why non-linearity"]
-    S2 --> S3["3. Forward pass<br/>shapes and parameter counts"]
-    S3 --> S4["4. Losses<br/>MSE, softmax cross-entropy"]
-    S4 --> S5["5. Backpropagation<br/>three rules + gradient check"]
-    S5 --> S6["6. Modular library<br/>Linear, ReLU, Sequential, SGD"]
-    S6 --> S7["7. Digits in NumPy<br/>training, errors, hyperparameters"]
-    S6 --> S8["8. Universal approximation<br/>width vs depth"]
+    S1["1. Perceptron and XOR: one neuron = one line"] --> S2["2. Activations: why non-linearity"]
+    S2 --> S3["3. Forward pass: shapes and parameter counts"]
+    S3 --> S4["4. Losses: MSE, softmax cross-entropy"]
+    S4 --> S5["5. Backpropagation: three rules + gradient check"]
+    S5 --> S6["6. Modular library: Linear, ReLU, Sequential, SGD"]
+    S6 --> S7["7. Digits in NumPy: training, errors, hyperparameters"]
+    S6 --> S8["8. Universal approximation: width vs depth"]
     S8 --> N3["Notebook 03: autograd takes over"]
 ```
 

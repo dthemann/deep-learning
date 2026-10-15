@@ -142,7 +142,7 @@ def fig_bpe_toy_merges():
     tpws = [tpw0] + [h[2] for h in hist]
     axes[2].plot(steps, tpws, marker="o", color=BLUE)
     axes[2].annotate(f"{tpws[0]:.2f}", (0, tpws[0]), xytext=(6, -2), textcoords="offset points", fontsize=8, color=INK_2)
-    axes[2].annotate(f"{tpws[-1]:.2f}", (steps[-1], tpws[-1]), xytext=(-24, 8), textcoords="offset points", fontsize=8, color=INK_2)
+    axes[2].annotate(f"{tpws[-1]:.2f}", (steps[-1], tpws[-1]), xytext=(-30, 8), textcoords="offset points", fontsize=8, color=INK_2)
     axes[2].set_title("Compression achieved"); axes[2].set_xlabel("number of merges"); axes[2].set_ylabel("tokens per word")
     save(fig, NB, "bpe_toy_merges")
 
@@ -188,7 +188,8 @@ def fig_token_counts_by_scheme():
                         color=INK_2, xytext=(0, 2), textcoords="offset points")
     ax.set_xticks(x); ax.set_xticklabels([f"S{i + 1}" for i in range(len(sentences))])
     ax.set_ylabel("tokens per sentence"); ax.set_xlabel("sentence (see table in the guide)")
-    ax.set_title("Sequence length under three tokenization schemes"); ax.legend()
+    ax.set_ylim(0, 43)
+    ax.set_title("Sequence length under three tokenization schemes"); ax.legend(loc="upper center", ncol=3)
     save(fig, NB, "token_counts_by_scheme")
 
 
@@ -313,8 +314,9 @@ def fig_skipgram_loss_curve():
     sm = np.convolve(log, np.ones(10) / 10, mode="valid")
     ax.plot(np.arange(len(sm)) + 10, sm, color=BLUE)
     ax.axhline((K + 1) * math.log(2), color=MUTED, linestyle="--", linewidth=1)
-    ax.annotate(f"(K+1) log 2 = {(K + 1) * math.log(2):.2f}", (len(log) * 0.55, (K + 1) * math.log(2)),
-                xytext=(0, 5), textcoords="offset points", fontsize=8, color=INK_2)
+    ax.set_ylim(top=4.6)
+    ax.annotate(f"start: (K+1) log 2 = {(K + 1) * math.log(2):.2f}", (len(log) * 0.55, (K + 1) * math.log(2)),
+                xytext=(0, -13), textcoords="offset points", fontsize=8, color=INK_2)
     ax.annotate(f"{sm[-1]:.2f}", (len(log), sm[-1]), xytext=(-30, 10), textcoords="offset points", fontsize=8, color=INK_2)
     ax.set_xlabel("optimizer step (batches of 128 pairs)"); ax.set_ylabel("negative-sampling loss (K = 5)")
     ax.set_title("Skip-gram with negative sampling on a toy corpus (10-step moving average)")
@@ -329,26 +331,24 @@ def fig_word2vec_toy_pca():
         sims = En @ En[w2i[q]]; sims[w2i[q]] = -1
         top = np.argsort(-sims)[:3]
         print(f"nearest to {q:>6s}: " + ", ".join(f"{vocab[i]} ({sims[i]:.2f})" for i in top))
-    # analogy in the toy space: king - queen + puppy -> ?  (same offset, different topic)
-    t = En[w2i["king"]] - En[w2i["queen"]] + En[w2i["kitten"]]; t = t / np.linalg.norm(t)
-    sims = En @ t
-    for q in ("king", "queen", "kitten"):
-        sims[w2i[q]] = -1
-    print("toy analogy queen : king :: kitten : ? ->", vocab[int(np.argmax(sims))], f"({sims.max():.2f})  (toy corpus, illustrative only)")
+    print(f"cosine(king, dog) = {En[w2i['king']] @ En[w2i['dog']]:.2f}, cosine(king, bread) = {En[w2i['king']] @ En[w2i['bread']]:.2f}")
     # PCA by SVD of the centred, normalized matrix
     Xc = En - En.mean(0, keepdims=True)
     U, S, Vt = np.linalg.svd(Xc, full_matrices=False)
     proj = Xc @ Vt[:2].T
     var = S ** 2 / (S ** 2).sum()
     print(f"PCA: first two components explain {var[0]:.1%} + {var[1]:.1%} = {var[:2].sum():.1%} of the variance")
+    labelled = {"royalty": ["king", "queen", "crowns"], "animals": ["dog", "cat", "chases"], "food": ["bread", "soup", "sweetens"]}
     fig, ax = plt.subplots(figsize=(6.4, 4.8))
     for (name, (nouns, verbs)), col in zip(TOPICS.items(), SERIES[:3]):
         idx = [w2i[x] for x in nouns + verbs]
-        ax.scatter(proj[idx, 0], proj[idx, 1], s=36, color=col, label=name, edgecolor=SURFACE, linewidth=0.8, zorder=3)
-        for i in idx:
-            ax.annotate(vocab[i], proj[i], xytext=(4, 3), textcoords="offset points", fontsize=7.5, color=INK_2)
+        ax.scatter(proj[idx, 0], proj[idx, 1], s=36, color=col, label=f"{name} (8 nouns + 4 verbs)", edgecolor=SURFACE, linewidth=0.8, zorder=3)
+        for x, off in zip(labelled[name], [(8, 8), (8, -12), (-6, -16)]):
+            i = w2i[x]
+            ax.annotate(x, proj[i], xytext=off, textcoords="offset points", fontsize=8, color=INK_2,
+                        ha="left" if off[0] > 0 else "right")
     ax.set_xlabel("principal component 1"); ax.set_ylabel("principal component 2")
-    ax.set_title("Toy word2vec embeddings, PCA projection (36 words)"); ax.legend(title=None, loc="best")
+    ax.set_title("Toy word2vec embeddings, PCA projection (36 words)"); ax.legend(title=None, loc="center")
     save(fig, NB, "word2vec_toy_pca")
 
 
@@ -461,7 +461,8 @@ def fig_finetune_recipe():
     for k, (vals, name) in enumerate(zip([fixed, dyn, real], ["fixed padding (to 32)", "dynamic padding", "real tokens"])):
         axes[0].bar(x + (k - 1) * w, vals, width=w, color=SERIES[k], label=name, edgecolor=SURFACE, linewidth=0.8)
     axes[0].set_xticks(x); axes[0].set_xticklabels([f"batch {i + 1}" for i in x])
-    axes[0].set_ylabel("tokens processed"); axes[0].set_title("Dynamic padding: tokens per batch of 4 sentences"); axes[0].legend()
+    axes[0].set_ylabel("tokens processed"); axes[0].set_title("Dynamic padding: tokens per batch of 4 sentences")
+    axes[0].set_ylim(0, 170); axes[0].legend(loc="upper center", ncol=3)
     axes[1].plot(range(total), factors, marker="o", color=BLUE)
     axes[1].annotate("peak after 4 warmup steps", (4, 1.0), xytext=(8, -4), textcoords="offset points", fontsize=8, color=INK_2)
     axes[1].set_xlabel("optimizer step"); axes[1].set_ylabel("learning-rate multiplier")
@@ -542,7 +543,7 @@ def fig_lora_params_vs_rank():
     ax.annotate(f"r = 8: {qv[3] / 1e3:.0f}k", (8, qv[3]), xytext=(6, -12), textcoords="offset points", fontsize=8, color=INK_2)
     ax.set_xscale("log", base=2); ax.set_yscale("log"); ax.set_xticks(ranks); ax.set_xticklabels([str(r) for r in ranks])
     ax.set_xlabel("LoRA rank r"); ax.set_ylabel("trainable adapter parameters (log scale)")
-    ax.set_title("LoRA parameters grow linearly with the rank"); ax.legend(loc="center right")
+    ax.set_title("LoRA parameters grow linearly with the rank"); ax.legend(loc="lower right")
     save(fig, NB, "lora_params_vs_rank")
 
 
@@ -557,7 +558,7 @@ def fig_dpo_loss_vs_margin():
     seq = prompt + response; labels = [-100] * len(prompt) + response
     logits = r.normal(size=(len(seq), V))
     logp = logits - np.log(np.exp(logits).sum(1, keepdims=True))
-    per_tok = [-logp[t, seq[t + 1]] for t in range(len(seq) - 1)]       # position t predicts token t+1
+    per_tok = [float(-logp[t, seq[t + 1]]) for t in range(len(seq) - 1)]   # position t predicts token t+1
     shifted_labels = labels[1:]
     kept = [l for l, lab in zip(per_tok, shifted_labels) if lab != -100]
     print("SFT masking: input_ids =", seq, " labels =", labels, " shifted labels =", shifted_labels)
@@ -575,7 +576,7 @@ def fig_dpo_loss_vs_margin():
     for k, beta in enumerate([0.1, 0.5, 2.0]):
         ax.plot(margins, -logsigmoid(beta * margins), color=SERIES[k], label=f"beta = {beta}")
     ax.axhline(math.log(2), color=MUTED, linestyle=":", linewidth=1)
-    ax.annotate("log 2 at zero margin", (-5.8, math.log(2)), xytext=(0, 4), textcoords="offset points", fontsize=8, color=INK_2)
+    ax.annotate("log 2 = 0.69 at zero margin", (-5.8, math.log(2)), xytext=(0, -13), textcoords="offset points", fontsize=8, color=INK_2)
     ax.set_xlabel("log-ratio margin  (log pi/pi_ref of chosen) - (log pi/pi_ref of rejected)")
     ax.set_ylabel("DPO loss  -log sigma(beta x margin)"); ax.set_title("The DPO loss is a logistic loss on the implicit-reward margin")
     ax.legend()
