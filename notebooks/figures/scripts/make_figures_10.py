@@ -606,6 +606,11 @@ def fig_dpo_toy_training():
     ref_lp = log_softmax_rows(ref_logits)
     print(f"{len(pairs)} preference pairs from a Bradley-Terry annotator; the reference policy agrees with the annotator on "
           f"{np.mean(ref_lp[P, C] > ref_lp[P, R]):.0%} of them; {nP * nR * (nR - 1) // 2} underlying response pairs")
+    from collections import Counter as _Counter
+    votes = _Counter(pairs)                                   # how often each ordered (prompt, winner, loser) label occurs
+    unsat = sum(min(votes[(p, i, j)], votes[(p, j, i)]) for (p, i, j) in votes if i < j)
+    print(f"{unsat} of the {len(pairs)} labels are outvoted contradictions of the same two responses (the annotator judged "
+          f"the pair both ways) -> at most {1 - unsat / len(pairs):.0%} of the training pairs can be satisfied at once")
 
     def train(beta, steps=150, lr=0.1):
         th = ref_logits.copy(); opt = Adam([th.shape], lr); log = {"loss": [], "acc": [], "kl": []}

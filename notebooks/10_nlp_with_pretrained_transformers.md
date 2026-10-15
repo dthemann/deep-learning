@@ -420,7 +420,7 @@ At zero margin every beta pays log 2 = 0.6931, the loss of a coin flip. The same
 | 0.5 | 0.693 | 0.133 | 94% | 1.91 | 77% of 60 pairs |
 | 2.0 | 0.693 | 0.103 | 94% | 0.87 | 75% of 60 pairs |
 
-All three runs rank the winner above the loser on 94% of the training pairs (the remaining 6% are contradictory labels that no policy can satisfy), and all three recover the hidden reward's ordering on about three quarters of all pairs although DPO never saw that reward. What beta changes is the KL price: 1.95 nats at beta = 0.1 versus 0.87 at beta = 2.
+All three runs rank the winner above the loser on 94% of the training pairs, and that is the ceiling: 3 of the 48 labels are outvoted contradictions (the noisy annotator judged the same two responses both ways), so at most 94% can be satisfied at once. All three recover the hidden reward's ordering on about three quarters of all pairs although DPO never saw that reward. What beta changes is the KL price: 1.95 nats at beta = 0.1 versus 0.87 at beta = 2.
 
 ### Chart
 

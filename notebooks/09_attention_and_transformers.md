@@ -295,7 +295,7 @@ A Transformer is one block repeated $L$ times. Each block has two sub-layers: mu
 ```mermaid
 flowchart TB
     X["input x (B, T, d)"] --> LN1["LayerNorm"]
-    LN1 --> ATT["multi-head self-attention<br/>Q K V projections, causal mask, W_O"]
+    LN1 --> ATT["multi-head self-attention: Q K V projections, causal mask, W_O"]
     ATT --> D1["dropout"]
     D1 --> ADD1["x + attention(LN(x))"]
     X --> ADD1
