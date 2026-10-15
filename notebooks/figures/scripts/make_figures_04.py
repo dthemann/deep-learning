@@ -462,8 +462,8 @@ def fig_overfit_polynomial():
     axes[2].semilogx(lams, tr_ridge, color=SERIES[0], label="training MSE")
     axes[2].semilogx(lams, te_ridge, color=SERIES[1], label="test MSE")
     axes[2].plot(lams[i_best], te_ridge[i_best], "o", ms=7, color=SERIES[1])
-    axes[2].annotate(f"best lambda = {lams[i_best]:.1e}", (lams[i_best], te_ridge[i_best]), xytext=(8, 12),
-                     textcoords="offset points", fontsize=8)
+    axes[2].annotate(f"best lambda = {lams[i_best]:.1e}", (lams[i_best], te_ridge[i_best]), xytext=(-95, 30),
+                     textcoords="offset points", fontsize=8, arrowprops=dict(arrowstyle="-", color=MUTED, lw=0.8))
     axes[2].set_xlabel("L2 penalty lambda (degree 9)"); axes[2].set_ylabel("mean squared error")
     axes[2].set_title("Weight decay tames the degree-9 fit"); axes[2].legend(fontsize=8)
     save(fig, NB, "overfitting_polynomial")
@@ -498,7 +498,7 @@ def fig_dropout_and_label_smoothing():
     ax1.imshow(M, cmap=SEQ_CMAP, aspect="auto", vmin=0, vmax=h.max())
     for i in range(12):
         ax1.text(i, 0, f"{h[i]:.2f}", ha="center", va="center", fontsize=7, color=INK)
-        ax1.text(i, 1, "keep" if mask[i] else "drop", ha="center", va="center", fontsize=7, color=INK if mask[i] else SURFACE)
+        ax1.text(i, 1, "keep" if mask[i] else "drop", ha="center", va="center", fontsize=7, color=SURFACE if mask[i] else INK_2)
         ax1.text(i, 2, f"{out[i]:.2f}", ha="center", va="center", fontsize=7, color=INK)
     ax1.set_yticks([0, 1, 2]); ax1.set_yticklabels(["input h", "mask (p = 0.5)", "output h·mask/(1-p)"]); ax1.set_xticks([])
     ax1.grid(False); ax1.set_title(f"Inverted dropout (p = 0.5): {int(mask.sum())} of 12 units kept, survivors doubled")
@@ -572,18 +572,23 @@ def fig_loss_curve_shapes():
     print(f"underfitting / too short: the first 40 epochs of the same run end at train {tr_l[39]:.3f}, test {te_l[39]:.3f}, both still falling")
 
     fig, axes = plt.subplots(2, 3, figsize=(12, 6.6))
-    panels = [(axes[0, 0], "Learning rate too low", low, "barely moves"),
-              (axes[0, 1], "Learning rate too high", np.minimum(high, 5.0), "spikes off the chart, then inf / NaN"),
-              (axes[0, 2], "Healthy", healthy, "fast drop, slow noisy decline"),
-              (axes[1, 0], "Bad initialization", plateau, "flat plateau, then a sudden drop")]
-    for ax, title, losses, note in panels:
-        ax.plot(losses, lw=1.0, color=SERIES[0])
+    panels = [(axes[0, 0], "Learning rate too low", low, low_full, "barely moves"),
+              (axes[0, 1], "Learning rate too high", high, high_full, "explodes, then inf / NaN"),
+              (axes[0, 2], "Healthy", healthy, healthy_full, "fast drop, slow noisy decline")]
+    for ax, title, losses, full, note in panels:
+        ax.plot(losses, lw=0.7, alpha=0.45, color=SERIES[0], label="mini-batch loss")
+        ax.plot(full, lw=1.8, color=SERIES[0], label="loss on all data")
         ax.set_title(title); ax.set_xlabel("step"); ax.set_ylabel("loss")
         ax.text(0.03, 0.9, note, transform=ax.transAxes, fontsize=8, color=INK_2)
-    axes[0, 0].set_ylim(0, 3); axes[0, 1].set_ylim(0, 5.2); axes[0, 2].set_ylim(0, 3); axes[1, 0].set_ylim(0, 0.6)
+    axes[0, 0].set_ylim(0, 3); axes[0, 2].set_ylim(0, 3); axes[0, 2].legend(fontsize=8)
+    axes[0, 1].set_yscale("log"); axes[0, 1].set_ylabel("loss (log)")
+    ax = axes[1, 0]
+    ax.plot(plateau, lw=1.5, color=SERIES[0]); ax.set_ylim(0, 0.6)
+    ax.set_title("Bad initialization"); ax.set_xlabel("step"); ax.set_ylabel("loss")
+    ax.text(0.03, 0.9, "flat plateau, then a sudden drop", transform=ax.transAxes, fontsize=8, color=INK_2)
     ax = axes[1, 1]
     ax.plot(tr_l, color=SERIES[0], label="train"); ax.plot(te_l, color=SERIES[1], label="validation")
-    ax.axvline(i_best + 1, color=MUTED, ls=":", lw=1); ax.set_ylim(0, 1.2)
+    ax.axvline(i_best + 1, color=MUTED, ls=":", lw=1); ax.set_ylim(0, 1.9)
     ax.set_title("Overfitting"); ax.set_xlabel("epoch"); ax.set_ylabel("loss"); ax.legend(fontsize=8)
     ax.text(0.03, 0.9, f"validation turns up after epoch {i_best + 1}", transform=ax.transAxes, fontsize=8, color=INK_2)
     ax = axes[1, 2]
