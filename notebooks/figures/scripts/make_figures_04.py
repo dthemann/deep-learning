@@ -227,7 +227,7 @@ def fig_optimizer_paths_quadratic():
     ax.plot(0, 0, "*", ms=12, color=INK, label="minimum")
     ax.set_xlim(-10, 4); ax.set_ylim(-3, 3); ax.set_xlabel("x"); ax.set_ylabel("y")
     ax.set_title("Six optimizers on f = 0.5 (x^2 + 20 y^2), 100 steps each")
-    ax.legend(fontsize=8, loc="upper left")
+    ax.legend(fontsize=8, loc="lower left")
     save(fig, NB, "optimizer_paths_quadratic")
 
 
@@ -522,22 +522,26 @@ def fig_loss_curve_shapes():
     x = r.normal(0, 1, N); y = 2.0 * x + 0.5 * r.normal(0, 1, N)
 
     def sgd_curve(lr, epochs=6, seed=10):
-        rr = np.random.default_rng(seed); th, losses = 0.0, []
+        """Returns (mini-batch losses, full-data losses) per step; pads with NaN after a blow-up."""
+        rr = np.random.default_rng(seed); th, losses, full = 0.0, [], []
+        total = epochs * (N // b)
         for _ in range(epochs):
             perm = rr.permutation(N)
             for i in range(0, N, b):
                 idx = perm[i:i + b]
                 losses.append(0.5 * np.mean((th * x[idx] - y[idx]) ** 2))
+                full.append(0.5 * np.mean((th * x - y) ** 2))
                 th -= lr * np.mean((th * x[idx] - y[idx]) * x[idx])
                 if not np.isfinite(th) or abs(th) > 1e6:
-                    return np.array(losses + [np.nan] * (epochs * (N // b) - len(losses)))
-        return np.array(losses)
+                    pad = [np.nan] * (total - len(losses))
+                    return np.array(losses + pad), np.array(full + pad)
+        return np.array(losses), np.array(full)
 
-    low, high, healthy = sgd_curve(0.001), sgd_curve(3.0), sgd_curve(0.05)
+    (low, low_full), (high, high_full), (healthy, healthy_full) = sgd_curve(0.001), sgd_curve(3.0), sgd_curve(0.05)
     n_finite = int(np.sum(np.isfinite(high)))
-    print(f"lr too low (0.001): loss after {len(low)} steps {low[-1]:.3f} (start {low[0]:.3f})")
-    print(f"lr too high (3.0): first losses {np.round(high[:5], 1)}; largest finite loss {np.nanmax(high):.3g}; non-finite after {n_finite} steps")
-    print(f"healthy (0.05): loss after {len(healthy)} steps {healthy[-1]:.3f}; below 0.3 after {int(np.argmax(healthy < 0.3))} steps")
+    print(f"lr too low (0.001): full-data loss after {len(low)} steps {low_full[-1]:.3f} (start {low_full[0]:.3f})")
+    print(f"lr too high (3.0): full-data losses at steps 1-5 {np.round(high_full[:5], 1)}; largest finite {np.nanmax(high_full):.3g}; non-finite after {n_finite} steps")
+    print(f"healthy (0.05): full-data loss after {len(healthy)} steps {healthy_full[-1]:.3f}; below 0.3 after {int(np.argmax(healthy_full < 0.3))} steps")
     # plateau: a chain of 10 scalar weights, loss 0.5 (prod w - 1)^2, small init
     n_w = 10
     w = np.full(n_w, 0.5); plateau = []

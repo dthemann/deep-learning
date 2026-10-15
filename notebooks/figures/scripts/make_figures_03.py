@@ -453,7 +453,7 @@ def fig_grad_accumulation():
     ax.bar(calls - w / 2, no_zero, width=w, color=SERIES[0], edgecolor=SURFACE, label="without zeroing (accumulates)")
     ax.bar(calls + w / 2, zero, width=w, color=SERIES[1], edgecolor=SURFACE, label="x.grad = 0 before each backward")
     ax.axhline(7, color=INK_2, linestyle=":", linewidth=1)
-    ax.text(4.45, 7.4, "true derivative 7", fontsize=8.5, color=INK_2, ha="right")
+    ax.text(0.52, 7.4, "true derivative 7", fontsize=8.5, color=INK_2, ha="left")
     for c, v in zip(calls, no_zero):
         ax.annotate(f"{v:g}", (c - w / 2, v), xytext=(0, 2), textcoords="offset points", ha="center", fontsize=8, color=INK_2)
     ax.set_xticks(calls); ax.set_xticklabels([f"backward #{c}" for c in calls])
@@ -486,7 +486,7 @@ def fig_tanh_derivatives():
     ax.annotate("slope is largest at 0", (0, 1), xytext=(12, 4), textcoords="offset points", fontsize=8.5, color=INK_2)
     ax.plot([-xstar, xstar], [abs(-2 * tv * (1 - tv ** 2)), -abs(-2 * tv * (1 - tv ** 2))], linestyle="none", marker="o", color=SERIES[2])
     ax.set_xlabel("x"); ax.set_ylabel("value"); ax.set_title("tanh and its first two derivatives")
-    ax.legend(loc="lower right")
+    ax.legend(loc="upper left")
     save(fig, NB, "tanh_derivatives")
 
 
