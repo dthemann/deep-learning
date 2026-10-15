@@ -150,7 +150,7 @@ def gradient_checks():
     _, _, c_norms = lstm_backward(p, cache, w[None, :])
     t0 = 1
     def rerun(c_pert):
-        hh, cc = cache[t0 + 1][1], c_pert         # h_{t0} unchanged, c_{t0} perturbed
+        hh, cc = cache[t0][6] * np.tanh(c_pert), c_pert   # h_{t0} = o_{t0} * tanh(c_{t0}) follows the perturbation
         for t in range(t0 + 1, T):
             gates = X[:1, t] @ p["W_ih"].T + hh @ p["W_hh"].T + p["b"]
             i, f, g, o = np.split(gates, 4, axis=1)
@@ -249,7 +249,7 @@ def fig_gradient_norm_vs_lag():
         lags, norms = rnn_grad_norm_vs_lag(gain)
         slope = np.polyfit(lags, np.log(norms), 1)[0]
         print(f"gain {gain:.1f}: norm at lag 0 = {norms[0]:.3f}, at lag 30 = {norms[30]:.2e}, at lag 59 = {norms[59]:.2e} | "
-              f"fitted slope {slope:+.3f} per step (factor {math.exp(slope):.3f}) | tanh' mean over the run n/a")
+              f"fitted slope {slope:+.3f} per step (factor {math.exp(slope):.3f})")
         ax.semilogy(lags, norms, color=c, label=f"tanh RNN, gain {gain}")
     lags, norms_id = rnn_grad_norm_vs_lag(1.0, act="identity")
     ratios = norms_id[1:] / norms_id[:-1]

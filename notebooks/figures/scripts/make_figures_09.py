@@ -406,8 +406,8 @@ def fig_lr_schedule():
     fig, ax = plt.subplots()
     ax.plot(np.arange(steps), lrs * 1e3, color=SERIES[0])
     ax.axvline(warmup, color=MUTED, linestyle=":", linewidth=1)
-    ax.annotate("end of warmup (step 50)", (warmup, max_lr * 1e3), xytext=(8, -2), textcoords="offset points", fontsize=8.5, color=INK_2)
-    ax.annotate(f"cosine floor {min_lr*1e3:.1f}e-3 at step 499", (steps - 1, min_lr * 1e3), xytext=(-150, 22), textcoords="offset points", fontsize=8.5, color=INK_2,
+    ax.text(warmup + 6, 0.12, "warmup ends at step 50\n(peak 3.0e-3)", fontsize=8.5, color=INK_2, va="bottom")
+    ax.annotate(f"cosine floor {min_lr*1e3:.1f}e-3 at step 499", (steps - 1, min_lr * 1e3), xytext=(-235, -12), textcoords="offset points", fontsize=8.5, color=INK_2,
                 arrowprops=dict(arrowstyle="-", color=MUTED, lw=0.8))
     ax.set_xlabel("training step"); ax.set_ylabel("learning rate (x 1e-3)")
     ax.set_title("Linear warmup then cosine decay (FAST_RUN settings)")

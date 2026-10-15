@@ -12,6 +12,9 @@ Every number quoted in the guide is printed by this script.
 """
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import os
+for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_v, "1")          # the matrices here are tiny: BLAS threads only add overhead
 import numpy as np
 import matplotlib.pyplot as plt
 from figstyle import *   # SERIES, BLUE, ORANGE, ..., SEQ_CMAP, DIV_CMAP, apply_style, save, bar
@@ -110,8 +113,15 @@ def make_teacher(seed=7):
     W1 = r.normal(0, 1 / np.sqrt(D_IN), (D_IN, HID_TEACHER)); b1 = r.normal(0, 0.5, HID_TEACHER)
     V_src = r.normal(0, 1, (HID_TEACHER, N_SRC)); V_tgt = r.normal(0, 1, (HID_TEACHER, N_TGT))
     Xc = r.normal(size=(20_000, D_IN)); hc = np.maximum(Xc @ W1 + b1, 0)
-    off_src, off_tgt = (hc @ V_src).mean(0), (hc @ V_tgt).mean(0)      # centre the class scores -> balanced classes
-    return dict(W1=W1, b1=b1, V_src=V_src, V_tgt=V_tgt, off_src=off_src, off_tgt=off_tgt)
+
+    def balance(S):
+        """Per-class offsets so that argmax(S - off) gives (nearly) equal class frequencies."""
+        off = S.mean(0).copy(); C = S.shape[1]
+        for _ in range(300):
+            freq = np.bincount((S - off).argmax(1), minlength=C) / len(S)
+            off += 0.5 * (freq - 1.0 / C) * S.std()
+        return off
+    return dict(W1=W1, b1=b1, V_src=V_src, V_tgt=V_tgt, off_src=balance(hc @ V_src), off_tgt=balance(hc @ V_tgt))
 
 
 def teacher_data(teacher, n, task, seed):
@@ -132,9 +142,9 @@ X_tgt_test, y_tgt_test = teacher_data(TEACHER, 4_000, "tgt", seed=2)
 X_tgt_pool, y_tgt_pool = teacher_data(TEACHER, 2_000, "tgt", seed=3)       # labelled target pool to subsample
 
 
-def pretrain_student(seed=11, steps=3_000):
+def pretrain_student(seed=11, steps=6_000):
     params = init_mlp(D_IN, HID_STUDENT, N_SRC, seed)
-    params, _ = adam_train(params, lambda p, X, y: mlp_loss_grads(p, X, y), [2e-3] * 4, steps,
+    params, _ = adam_train(params, lambda p, X, y: mlp_loss_grads(p, X, y), [3e-3] * 4, steps,
                            batches=(X_src, y_src, 200), seed=seed)
     return params
 
@@ -145,26 +155,27 @@ def run_target_methods(pre_params, n_train, seed, steps=300, record=False):
     idx = r.choice(len(y_tgt_pool), n_train, replace=False)
     X, y = X_tgt_pool[idx], y_tgt_pool[idx]
     ev = accuracy_fn(X_tgt_test, y_tgt_test)
+    every = 10 if record else steps                    # the sweep only needs the final accuracy
     out = {}
     # (a) linear probe on frozen PRETRAINED features
     F_tr, F_te = mlp_features(pre_params, X), mlp_features(pre_params, X_tgt_test)
     head = [np.zeros((HID_STUDENT, N_TGT)), np.zeros(N_TGT)]
     probe_eval = lambda p: float(((F_te @ p[0] + p[1]).argmax(1) == y_tgt_test).mean())
-    _, h = adam_train(head, lambda p: linear_loss_grads(p, F_tr, y), [1e-2, 1e-2], steps, probe_eval, every=10)
+    _, h = adam_train(head, lambda p: linear_loss_grads(p, F_tr, y), [1e-2, 1e-2], steps, probe_eval, every=every)
     out["linear probe (pretrained features)"] = h
     # (b) linear probe on frozen RANDOM features (control)
     rand_params = init_mlp(D_IN, HID_STUDENT, N_SRC, seed + 100)
     F_tr, F_te = mlp_features(rand_params, X), mlp_features(rand_params, X_tgt_test)
     head = [np.zeros((HID_STUDENT, N_TGT)), np.zeros(N_TGT)]
-    _, h = adam_train(head, lambda p: linear_loss_grads(p, F_tr, y), [1e-2, 1e-2], steps, probe_eval, every=10)
+    _, h = adam_train(head, lambda p: linear_loss_grads(p, F_tr, y), [1e-2, 1e-2], steps, probe_eval, every=every)
     out["linear probe (random features)"] = h
     # (c) fine-tuning from the pretrained weights, new head, discriminative LR (hidden layer: lr / 2.6)
     ft = [pre_params[0].copy(), pre_params[1].copy(), np.zeros((HID_STUDENT, N_TGT)), np.zeros(N_TGT)]
-    _, h = adam_train(ft, lambda p: mlp_loss_grads(p, X, y), [1e-2 / 2.6, 1e-2 / 2.6, 1e-2, 1e-2], steps, ev, every=10)
+    _, h = adam_train(ft, lambda p: mlp_loss_grads(p, X, y), [1e-2 / 2.6, 1e-2 / 2.6, 1e-2, 1e-2], steps, ev, every=every)
     out["fine-tuning (discriminative LR)"] = h
     # (d) the same architecture from scratch
     sc = init_mlp(D_IN, HID_STUDENT, N_TGT, seed + 200)
-    _, h = adam_train(sc, lambda p: mlp_loss_grads(p, X, y), [1e-2] * 4, steps, ev, every=10)
+    _, h = adam_train(sc, lambda p: mlp_loss_grads(p, X, y), [1e-2] * 4, steps, ev, every=every)
     out["from scratch"] = h
     return out if record else {k: v[-1][1] for k, v in out.items()}
 
