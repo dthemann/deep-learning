@@ -1,10 +1,10 @@
 """Figures for the companion guide of Notebook 06 · Convolutional Neural Networks.
 
-Everything here is numpy + matplotlib (plus scikit-learn's bundled ``china.jpg`` sample image and
-``make_moons`` generator; nothing is downloaded). Cross-correlation, pooling, im2col, receptive-field
+Everything here is numpy + matplotlib (plus scikit-learn's bundled ``china.jpg`` sample image; nothing
+is downloaded). Cross-correlation, pooling, im2col, receptive-field
 arithmetic and the cost formulas are re-implemented in numpy so that the notebook's numbers can be
-reproduced without PyTorch. The "degradation" experiment of Section 6 is a small numpy MLP on the
-two-moons problem, trained with hand-written backpropagation: a toy, clearly labelled as such.
+reproduced without PyTorch. Section 6 measures, on random He-initialised ReLU stacks, how close a plain and a residual stack
+start to the identity and how the input gradient behaves with depth: numbers at initialisation, no training.
 
 Run:  python3 notebooks/figures/scripts/make_figures_06.py
 Every number quoted in the guide is printed by this script.
@@ -522,111 +522,83 @@ def fig_crop_flip_augmentation():
 
 
 # ----------------------------------------------------------------------------------------------
-# Section 6: plain versus residual MLPs on two moons (toy, numpy, hand-written backprop)
+# Section 6: why residual blocks are easier to optimise, measured at initialisation (numpy)
 # ----------------------------------------------------------------------------------------------
-def make_mlp(depth, width, residual, seed):
-    r = np.random.default_rng(seed)
-    params = {"Win": r.standard_normal((width, 2)) * np.sqrt(2 / 2), "bin": np.zeros(width),
-              "W": [r.standard_normal((width, width)) * np.sqrt(2 / width) for _ in range(depth)],
-              "b": [np.zeros(width) for _ in range(depth)],
-              "Wout": r.standard_normal((1, width)) * np.sqrt(1 / width), "bout": np.zeros(1)}
-    params["alpha"] = 1 / np.sqrt(depth) if residual else None      # residual branch scale (keeps the signal size)
-    return params
+def residual_block_by_hand():
+    print("\n=== residual block by hand (table in the guide, no figure) ===")
+    x = np.array([1.0, -2.0, 0.5])
+    W = np.array([[0.5, 0.0, -1.0], [0.2, 0.3, 0.0], [-0.4, 0.1, 0.6]])
+    z = W @ x
+    Fx = np.maximum(z, 0)
+    print("x =", x.tolist(), "| W x =", np.round(z, 2).tolist(), "| F(x) = relu(W x) =", Fx.tolist())
+    print("plain block output   :", Fx.tolist())
+    print("residual block output:", np.round(Fx + x, 2).tolist(), "(= F(x) + x)")
+    print("with W = 0 the residual block returns x exactly:", (np.maximum(np.zeros((3, 3)) @ x, 0) + x).tolist(),
+          "; the plain block returns", np.maximum(np.zeros((3, 3)) @ x, 0).tolist())
 
 
-def mlp_forward(p, X):
-    h = np.maximum(X @ p["Win"].T + p["bin"], 0)
-    cache = [(X, h)]
-    hs = [h]
-    for W, b in zip(p["W"], p["b"]):
-        z = h @ W.T + b
-        a = np.maximum(z, 0)
-        h = h + p["alpha"] * a if p["alpha"] is not None else a
-        cache.append((z, a)); hs.append(h)
-    logits = (h @ p["Wout"].T + p["bout"]).ravel()
-    return logits, cache, hs
+def stack_stats(depth, width, residual, n_seeds=50):
+    """For random He-initialised ReLU stacks: cosine similarity between output and input, and the norm of
+    the gradient of a random linear read-out with respect to the input. Residual stacks use
+    h <- h + F(h) / sqrt(depth), the scale control that BatchNorm provides in the real block."""
+    alpha = 1.0 / np.sqrt(depth)
+    cos, gnorm = [], []
+    for s in range(n_seeds):
+        r = np.random.default_rng(1000 + s)
+        x = r.standard_normal(width); x /= np.linalg.norm(x)
+        Ws = [r.standard_normal((width, width)) * np.sqrt(2 / width) for _ in range(depth)]
+        readout = r.standard_normal(width); readout /= np.linalg.norm(readout)
+        h, masks = x.copy(), []
+        for W in Ws:
+            z = W @ h; m = (z > 0).astype(float); masks.append(m)
+            h = h + alpha * np.maximum(z, 0) if residual else np.maximum(z, 0)
+        cos.append(float(h @ x / (np.linalg.norm(h) * np.linalg.norm(x) + 1e-12)))
+        g = readout.copy()                                        # d(readout . h_L) / d h_L
+        for W, m in zip(reversed(Ws), reversed(masks)):           # back through the stack
+            g = g + alpha * (W.T @ (m * g)) if residual else W.T @ (m * g)
+        gnorm.append(float(np.linalg.norm(g)))
+    return np.array(cos), np.array(gnorm)
 
 
-def mlp_loss_grads(p, X, y):
-    logits, cache, hs = mlp_forward(p, X)
-    prob = 0.5 * (1 + np.tanh(0.5 * logits))
-    loss = float(np.mean(np.maximum(logits, 0) - logits * y + np.log1p(np.exp(-np.abs(logits)))))
-    g = ((prob - y) / len(y))[:, None]                     # dL/dlogits, (N, 1)
-    grads = {"W": [None] * len(p["W"]), "b": [None] * len(p["b"])}
-    grads["Wout"] = g.T @ hs[-1]; grads["bout"] = g.sum(axis=0)
-    gh = g @ p["Wout"]                                     # dL/dh_last
-    for l in reversed(range(len(p["W"]))):
-        z, a = cache[l + 1]
-        ga = gh * p["alpha"] if p["alpha"] is not None else gh
-        gz = ga * (z > 0)
-        grads["W"][l] = gz.T @ hs[l]; grads["b"][l] = gz.sum(axis=0)
-        gh = gz @ p["W"][l] + (gh if p["alpha"] is not None else 0)
-    X0, h0 = cache[0]
-    gz0 = gh * (h0 > 0)
-    grads["Win"] = gz0.T @ X0; grads["bin"] = gz0.sum(axis=0)
-    return loss, grads, (prob > 0.5).astype(float)
-
-
-def train_mlp(depth, width, residual, X, y, steps, lr, seed=0):
-    p = make_mlp(depth, width, residual, seed)
-    vel = {k: (np.zeros_like(v) if not isinstance(v, list) else [np.zeros_like(a) for a in v])
-           for k, v in p.items() if k != "alpha"}
-    losses = []
-    for _ in range(steps):
-        loss, g, pred = mlp_loss_grads(p, X, y)
-        losses.append(loss)
-        for k in ("Win", "bin", "Wout", "bout"):
-            vel[k] = 0.9 * vel[k] + g[k]; p[k] -= lr * vel[k]
-        for l in range(depth):
-            for k in ("W", "b"):
-                vel[k][l] = 0.9 * vel[k][l] + g[k][l]; p[k][l] -= lr * vel[k][l]
-    loss, _, pred = mlp_loss_grads(p, X, y)
-    return np.array(losses), float((pred == y).mean())
-
-
-def fig_plain_vs_residual_toy():
-    print("\n=== fig_plain_vs_residual_toy ===")
-    from sklearn.datasets import make_moons
-    X, y = make_moons(n_samples=400, noise=0.15, random_state=0)
-    X = (X - X.mean(axis=0)) / X.std(axis=0)
-    y = y.astype(float)
-    width, steps, lr, seeds = 16, 400, 0.03, (0, 1, 2)
-    depths = (2, 4, 8, 16, 24, 32)
-    print(f"two moons (400 points, noise 0.15), width {width}, full-batch SGD momentum 0.9, lr {lr}, {steps} steps, "
-          f"mean over {len(seeds)} seeds; residual branch scaled by 1/sqrt(depth) at init")
-    curves, final, accs = {}, {False: [], True: []}, {False: [], True: []}
-    print(f"{'depth':>5s} {'plain final loss':>16s} {'plain acc':>10s} {'residual final loss':>19s} {'residual acc':>13s}")
-    for depth in depths:
-        for res in (False, True):
-            cs, ac = [], []
-            for s in seeds:
-                losses, acc = train_mlp(depth, width, res, X, y, steps, lr, seed=s)
-                cs.append(losses); ac.append(acc)
-            curves[(depth, res)] = np.mean(cs, axis=0)
-            final[res].append(curves[(depth, res)][-1]); accs[res].append(100 * np.mean(ac))
-        print(f"{depth:>5d} {final[False][-1]:>16.3f} {accs[False][-1]:>9.1f}% {final[True][-1]:>19.3f} {accs[True][-1]:>12.1f}%")
-    show = [("plain, 2 hidden layers", (2, False), SERIES[0]), ("plain, 16 hidden layers", (16, False), SERIES[1]),
-            ("residual, 16 hidden layers", (16, True), SERIES[2])]
-    for name, key, _ in show:
-        c = curves[key]
-        print(f"  {name}: loss at step 100 = {c[99]:.3f}, step 200 = {c[199]:.3f}, step 400 = {c[-1]:.3f}")
+def fig_residual_mechanisms():
+    print("\n=== fig_residual_mechanisms ===")
+    width, n_seeds = 64, 50
+    depths = [1, 2, 4, 8, 16, 32, 64]
+    rows = {}
+    print(f"random ReLU stacks, width {width}, He init, {n_seeds} seeds; residual branch scaled by 1/sqrt(depth)")
+    print(f"{'depth':>5s} | {'cos(out, in) plain':>18s} {'residual':>9s} | {'|grad| plain p10/p50/p90':>26s} | {'|grad| residual p10/p50/p90':>28s}")
+    for L in depths:
+        pc, pg = stack_stats(L, width, False, n_seeds); rc, rg = stack_stats(L, width, True, n_seeds)
+        rows[L] = (pc, pg, rc, rg)
+        q = lambda a: np.percentile(a, [10, 50, 90])
+        print(f"{L:>5d} | {pc.mean():>18.3f} {rc.mean():>9.3f} | {q(pg)[0]:>8.3f} {q(pg)[1]:>8.3f} {q(pg)[2]:>8.3f} | "
+              f"{q(rg)[0]:>9.3f} {q(rg)[1]:>9.3f} {q(rg)[2]:>8.3f}")
+    L64 = rows[64]
+    print(f"depth 64: plain gradient band p90/p10 = {np.percentile(L64[1], 90) / np.percentile(L64[1], 10):.1f}x, "
+          f"residual band = {np.percentile(L64[3], 90) / np.percentile(L64[3], 10):.1f}x")
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
-    for name, key, col in show:
-        axes[0].plot(np.arange(1, steps + 1), curves[key], color=col, label=name)
-    axes[0].set(xlabel="training step", ylabel="training loss (binary cross-entropy)",
-                title="Deeper plain MLP trains worse; the residual one does not")
+    pm = [rows[L][0].mean() for L in depths]; rm = [rows[L][2].mean() for L in depths]
+    axes[0].plot(depths, pm, marker="o", color=SERIES[1], label="plain stack")
+    axes[0].plot(depths, rm, marker="s", color=SERIES[2], label="residual stack")
+    axes[0].set_xscale("log", base=2); axes[0].set_xticks(depths); axes[0].set_xticklabels(depths)
+    axes[0].set(xlabel="number of layers", ylabel="cosine similarity (output, input)",
+                title="Identity is easy: a residual stack starts near the identity")
+    axes[0].axhline(0, color=AXIS, linewidth=0.8)
+    axes[0].annotate(f"{rm[0]:.2f}", (1, rm[0]), xytext=(6, 4), textcoords="offset points", fontsize=9, color=INK_2)
     axes[0].legend()
-    axes[1].plot(depths, final[False], marker="o", color=SERIES[1], label="plain")
-    axes[1].plot(depths, final[True], marker="s", color=SERIES[2], label="residual")
-    axes[1].set_xticks(depths)
-    axes[1].set(xlabel="number of hidden layers", ylabel="training loss after 400 steps (mean of 3 seeds)",
-                title="Final training loss versus depth")
-    axes[1].annotate(f"plain-16: {final[False][3]:.2f}", (16, final[False][3]), xytext=(8, 4), textcoords="offset points",
-                     fontsize=9, color=INK_2)
-    axes[1].legend()
-    fig.suptitle("Numpy toy on two moons (a stand-in for the notebook's CIFAR-10 experiment)", fontsize=10, color=INK_2, y=1.02)
-    save(fig, NB, "plain_vs_residual_toy")
+    for col, idx, name in [(SERIES[1], 1, "plain stack"), (SERIES[2], 3, "residual stack")]:
+        p10 = [np.percentile(rows[L][idx], 10) for L in depths]; p50 = [np.percentile(rows[L][idx], 50) for L in depths]
+        p90 = [np.percentile(rows[L][idx], 90) for L in depths]
+        axes[1].plot(depths, p50, marker="o", color=col, label=f"{name} (median)")
+        axes[1].fill_between(depths, p10, p90, color=col, alpha=0.18, linewidth=0, label=f"{name} (10th to 90th percentile)")
+    axes[1].set_xscale("log", base=2); axes[1].set_yscale("log"); axes[1].set_xticks(depths); axes[1].set_xticklabels(depths)
+    axes[1].set(xlabel="number of layers", ylabel="norm of the gradient at the input (log)",
+                title="Gradients flow: plain gradients shrink and scatter, residual ones do not")
+    axes[1].legend(fontsize=8)
+    fig.suptitle(f"Measured at initialisation on random width-{width} ReLU stacks ({n_seeds} seeds), not after training",
+                 fontsize=10, color=INK_2, y=1.02)
+    save(fig, NB, "residual_mechanisms")
 
 
 # ----------------------------------------------------------------------------------------------
@@ -733,7 +705,8 @@ def main():
     fig_lenet_layers()
     fig_vgg_stage_costs()
     fig_crop_flip_augmentation()
-    fig_plain_vs_residual_toy()
+    residual_block_by_hand()
+    fig_residual_mechanisms()
     fig_architecture_tour()
     fig_occlusion_toy()
 

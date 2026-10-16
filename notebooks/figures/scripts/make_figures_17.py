@@ -9,13 +9,15 @@ The synthetic-shapes dataset, the time series, the paired-bootstrap experiment, 
 and the FrozenLake Q-learning run replicate the notebook's own numpy code with the notebook's seeds, so
 the printed values are the ones the notebook produces on its offline fallback path.
 """
-import sys, pathlib, math, re
+import sys, pathlib, math, re, warnings
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import numpy as np
 import matplotlib.pyplot as plt
 from figstyle import *   # SERIES, BLUE, ORANGE, ..., SEQ_CMAP, DIV_CMAP, apply_style, save, bar
 apply_style()
 rng = np.random.default_rng(0)
+from sklearn.exceptions import ConvergenceWarning
+warnings.filterwarnings("ignore", category=ConvergenceWarning)   # the small MLPs run a fixed budget of 60 epochs on purpose
 
 NB = "17"
 SEED = 42            # the notebook's seed
